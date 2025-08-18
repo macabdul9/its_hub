@@ -29,14 +29,14 @@ class ParticleGibbsResult(AbstractScalingResult):
 
 @dataclass
 class ParticleFilteringResult(AbstractScalingResult):
-    responses_lst: list[str]
+    responses: list[str]
     log_weights_lst: list[float]
     selected_index: int
     steps_used_lst: list[int]
 
     @property
     def the_one(self) -> str:
-        return self.responses_lst[self.selected_index]
+        return self.responses[self.selected_index]
 
 
 @dataclass
@@ -318,7 +318,7 @@ class ParticleFiltering(ParticleGibbs):
 
         # Flatten the single-iteration result
         flattened_result = ParticleFilteringResult(
-            responses_lst=result.responses_lst[0],
+            responses=result.responses_lst[0],
             log_weights_lst=result.log_weights_lst[0],
             selected_index=result.selected_index,
             steps_used_lst=result.steps_used_lst[0],
