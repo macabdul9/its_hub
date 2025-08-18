@@ -28,6 +28,18 @@ class ParticleGibbsResult(AbstractScalingResult):
 
 
 @dataclass
+class ParticleFilteringResult(AbstractScalingResult):
+    responses_lst: list[str]
+    log_weights_lst: list[float]
+    selected_index: int
+    steps_used_lst: list[int]
+
+    @property
+    def the_one(self) -> str:
+        return self.responses_lst[self.selected_index]
+
+
+@dataclass
 class Particle:
     steps: list[str]
     is_stopped: bool
@@ -293,4 +305,24 @@ class ParticleFiltering(ParticleGibbs):
             selection_method=selection_method,
             num_ref_particles=0,
             does_ancestor_sampling=False,
+        )
+
+    def infer(
+        self,
+        lm: AbstractLanguageModel,
+        prompt: str,
+        budget: int,
+        return_response_only: bool = True,
+    ) -> str | ParticleFilteringResult:
+        result = super().infer(lm, prompt, budget, return_response_only=False)
+
+        if return_response_only:
+            return result.the_one
+
+        # Flatten the single-iteration result
+        return ParticleFilteringResult(
+            responses_lst=result.responses_lst[0],
+            log_weights_lst=result.log_weights_lst[0],
+            selected_index=result.selected_index,
+            steps_used_lst=result.steps_used_lst[0],
         )
