@@ -272,10 +272,15 @@ class PlanningWrapper(AbstractScalingAlgorithm):
         elif hasattr(result, "all_scores") and result.all_scores:
             return float(max(result.all_scores))
         elif hasattr(result, "log_weights_lst") and result.log_weights_lst:
-            # For ParticleFiltering
+            # For ParticleFiltering - handle both nested and flat structures
             all_weights = []
-            for weights in result.log_weights_lst:
-                all_weights.extend(weights)
+            if isinstance(result.log_weights_lst[0], list):
+                # ParticleGibbsResult structure (nested lists)
+                for weights in result.log_weights_lst:
+                    all_weights.extend(weights)
+            else:
+                # ParticleFilteringResult structure (flat list)
+                all_weights = result.log_weights_lst
             return float(max(all_weights)) if all_weights else 0.0
 
         # Fallback: use response length as a proxy (longer = more detailed)
