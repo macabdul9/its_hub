@@ -8,7 +8,7 @@ import pytest
 from its_hub.algorithms.self_consistency import _select_most_common_or_random
 from its_hub.algorithms.beam_search import BeamSearch, BeamSearchResult, Path
 from its_hub.algorithms.particle_gibbs import (
-    ParticleGibbs, ParticleGibbsResult, ParticleFiltering, 
+    ParticleGibbs, ParticleGibbsResult, ParticleFiltering, ParticleFilteringResult,
     SelectionMethod, Particle
 )
 from its_hub.algorithms.bon import BestOfN, BestOfNResult
@@ -291,6 +291,23 @@ class TestParticleFiltering:
         particle_filtering = ParticleFiltering(sg, mock_prm, selection_method=SelectionMethod.ARGMAX)
         result = particle_filtering.infer(mock_lm, "Solve this:", budget=2, return_response_only=False)
         
-        assert isinstance(result, ParticleGibbsResult)
-        assert len(result.responses_lst) == 1  # Only 1 iteration
-        assert len(result.responses_lst[0]) == 2  # budget = 2
+        assert isinstance(result, ParticleFilteringResult)
+        assert len(result.responses) == 2  # budget = 2 (flattened from single iteration)
+        
+        # Test that .the_one property works correctly with flattened structure
+        assert result.the_one == result.responses[result.selected_index]
+        assert isinstance(result.the_one, str)
+
+    def test_particle_filtering_return_response_only(self):
+        """Test ParticleFiltering with return_response_only=True."""
+        mock_lm = StepMockLanguageModel(["step1", "step2"])
+        mock_prm = MockProcessRewardModel([0.7, 0.6])
+        
+        sg = StepGeneration(step_token="\n", max_steps=1)
+        
+        particle_filtering = ParticleFiltering(sg, mock_prm, selection_method=SelectionMethod.ARGMAX)
+        result = particle_filtering.infer(mock_lm, "Solve this:", budget=2, return_response_only=True)
+        
+        # Should return just the string response
+        assert isinstance(result, str)
+        assert result  # Should not be empty
