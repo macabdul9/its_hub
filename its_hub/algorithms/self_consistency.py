@@ -1,4 +1,5 @@
 import random
+import re
 from collections import Counter
 from collections.abc import Callable
 
@@ -141,3 +142,57 @@ class SelfConsistency(AbstractScalingAlgorithm):
             selected_index=selected_index,
         )
         return result.the_one if return_response_only else result
+
+
+def create_regex_projection_function(patterns: str | list[str]) -> Callable[[str], tuple]:
+    """Create a hierarchical projection function from regex pattern(s).
+
+    Args:
+        patterns: Single regex pattern string or list of regex patterns.
+                 Each pattern should contain capturing groups to extract features.
+                 For hierarchical consistency, earlier patterns in the list represent
+                 higher hierarchy levels.
+
+    Returns:
+        A projection function that takes a response string and returns a tuple
+        where each element corresponds to the first match from each pattern.
+        If no match is found for a pattern, None is used for that position.
+
+    Example:
+        # Single pattern for extracting final answer
+        pattern = r'\\\\boxed\\{([^}]+)\\}'
+        proj_func = create_regex_projection_function(pattern)
+        proj_func("The answer is \\\\boxed{42}") -> ("42",)
+
+        # Multiple patterns for hierarchical consistency
+        patterns = [r'Method:\\s*(\\w+)', r'\\\\boxed\\{([^}]+)\\}']
+        proj_func = create_regex_projection_function(patterns)
+        proj_func("Method: algebra\\n...\\nAnswer: \\\\boxed{42}") -> ("algebra", "42")
+    """
+    # Ensure patterns is a list
+    if isinstance(patterns, str):
+        patterns = [patterns]
+
+    # Compile regex patterns for efficiency
+    compiled_patterns = [re.compile(pattern, re.DOTALL | re.IGNORECASE) for pattern in patterns]
+
+    def projection_function(response: str) -> tuple:
+        """Extract features from response using compiled regex patterns."""
+        results = []
+
+        for pattern in compiled_patterns:
+            match = pattern.search(response)
+            if match:
+                # If pattern has capturing groups, use the first group
+                if match.groups():
+                    results.append(match.group(1).strip())
+                else:
+                    # If no capturing groups, use the entire match
+                    results.append(match.group(0).strip())
+            else:
+                # No match found, use None
+                results.append(None)
+
+        return tuple(results)
+
+    return projection_function
