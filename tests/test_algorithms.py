@@ -5,7 +5,7 @@ from copy import deepcopy
 from typing import List
 import pytest
 
-from its_hub.algorithms.self_consistency import _select_most_common_or_random
+from its_hub.algorithms.self_consistency import _select_most_common_or_random, _select_hierarchical_most_common_or_random, SelfConsistency, SelfConsistencyResult
 from its_hub.algorithms.beam_search import BeamSearch, BeamSearchResult, Path
 from its_hub.algorithms.particle_gibbs import (
     ParticleGibbs, ParticleGibbsResult, ParticleFiltering, ParticleFilteringResult,
@@ -40,6 +40,83 @@ class TestSelfConsistency:
         else:
             # Single winner
             assert test_list[selected_index] == expected_element
+
+    @pytest.mark.parametrize("test_tuples,expected_winner", [
+        # Test case from issue: "a" is most common at level 0, "1" and "2" equally common at level 1
+        ([("a", "1"), ("a", "2"), ("b", "1"), ("c", "1")], [("a", "1"), ("a", "2")]),
+        # Clear hierarchy winner
+        ([("a", "1"), ("a", "1"), ("b", "1")], [("a", "1")]),
+        # All different at level 0
+        ([("a", "1"), ("b", "2"), ("c", "3")], [("a", "1"), ("b", "2"), ("c", "3")]),
+        # Same at level 0, different at level 1  
+        ([("a", "1"), ("a", "2"), ("a", "1")], [("a", "1")]),
+        # Different depths
+        ([("a", "1", "x"), ("a", "1", "y"), ("a", "2"), ("b", "1")], [("a", "1", "x"), ("a", "1", "y")]),
+        # Single element tuples
+        ([("a",), ("b",), ("a",)], [("a",)]),
+    ])
+    def test_select_hierarchical_most_common_or_random(self, test_tuples, expected_winner):
+        """Test hierarchical selection of most common element with various scenarios."""
+        counts, selected_index = _select_hierarchical_most_common_or_random(test_tuples)
+        
+        # Check that the selected tuple is one of the expected winners
+        selected_tuple = test_tuples[selected_index]
+        assert selected_tuple in expected_winner
+        
+        # Check that counts include all tuples
+        assert sum(counts.values()) == len(test_tuples)
+        for tuple_item in test_tuples:
+            assert tuple_item in counts
+    
+    def test_select_hierarchical_empty_list(self):
+        """Test hierarchical selection with empty list."""
+        with pytest.raises(ValueError, match="Cannot select from empty list"):
+            _select_hierarchical_most_common_or_random([])
+
+    def test_self_consistency_flat_projection(self):
+        """Test SelfConsistency with flat (string) projection function."""
+        mock_lm = StepMockLanguageModel(["answer1", "answer2", "answer1", "answer3"])
+        
+        def flat_projection(response: str) -> str:
+            return response[-1]  # Last character
+        
+        sc = SelfConsistency(flat_projection)
+        result = sc.infer(mock_lm, "test prompt", budget=4, return_response_only=False)
+        
+        assert isinstance(result, SelfConsistencyResult)
+        assert len(result.responses) == 4
+        assert isinstance(result.response_counts, Counter)
+        # "1" appears twice (from "answer1"), should be selected
+        assert result.the_one in ["answer1", "answer1"]
+
+    def test_self_consistency_hierarchical_projection(self):
+        """Test SelfConsistency with hierarchical (tuple) projection function."""
+        mock_lm = StepMockLanguageModel(["a1", "a2", "b1", "c1"])
+        
+        def hierarchical_projection(response: str) -> tuple:
+            return (response[0], response[1])  # First char, second char as tuple
+        
+        sc = SelfConsistency(hierarchical_projection)
+        result = sc.infer(mock_lm, "test prompt", budget=4, return_response_only=False)
+        
+        assert isinstance(result, SelfConsistencyResult)
+        assert len(result.responses) == 4
+        assert isinstance(result.response_counts, Counter)
+        # "a" is most common at level 0, so should select either "a1" or "a2"
+        assert result.the_one in ["a1", "a2"]
+
+    def test_self_consistency_return_response_only(self):
+        """Test SelfConsistency with return_response_only=True."""
+        mock_lm = StepMockLanguageModel(["a1", "a2", "b1", "c1"])
+        
+        def hierarchical_projection(response: str) -> tuple:
+            return (response[0], response[1])
+        
+        sc = SelfConsistency(hierarchical_projection)
+        result = sc.infer(mock_lm, "test prompt", budget=4, return_response_only=True)
+        
+        assert isinstance(result, str)
+        assert result in ["a1", "a2"]  # Should be one of the "a" responses
 
 
 class TestDataStructures:
