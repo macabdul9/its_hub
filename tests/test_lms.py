@@ -23,8 +23,8 @@ class TestOpenAICompatibleLanguageModel:
             max_tries=2
         )
 
-        messages = TestDataFactory.create_chat_messages("Hello, world!")
-        response = model.generate(messages)
+        chat_messages = TestDataFactory.create_chat_messages("Hello, world!")
+        response = model.generate(chat_messages.to_chat_messages())
         assert response == "Response to: Hello, world!"
 
     @pytest.mark.parametrize("scenario_name", ["simple_chat", "math_problem", "with_system_prompt"])
@@ -42,12 +42,12 @@ class TestOpenAICompatibleLanguageModel:
             max_tries=2
         )
 
-        messages = TestDataFactory.create_chat_messages(
+        chat_messages = TestDataFactory.create_chat_messages(
             scenario["user_content"],
             scenario.get("system_content")
         )
 
-        response = model.generate(messages)
+        response = model.generate(chat_messages.to_chat_messages())
         assert response == scenario["expected_response"]
 
     @pytest.mark.parametrize("stop_token,include_stop,expected_suffix", [
@@ -64,9 +64,9 @@ class TestOpenAICompatibleLanguageModel:
             max_tries=2
         )
 
-        messages = TestDataFactory.create_chat_messages("Hello, world!")
+        chat_messages = TestDataFactory.create_chat_messages("Hello, world!")
         response = model.generate(
-            messages,
+            chat_messages.to_chat_messages(),
             stop=stop_token,
             include_stop_str_in_output=include_stop
         )
@@ -84,8 +84,8 @@ class TestOpenAICompatibleLanguageModel:
         )
 
         messages_lst = [
-            TestDataFactory.create_chat_messages("Hello, world!"),
-            TestDataFactory.create_chat_messages("How are you?")
+            TestDataFactory.create_chat_messages("Hello, world!").to_chat_messages(),
+            TestDataFactory.create_chat_messages("How are you?").to_chat_messages()
         ]
 
         responses = model.generate(messages_lst)
@@ -103,7 +103,7 @@ class TestOpenAICompatibleLanguageModel:
         )
 
         messages_lst = [
-            TestDataFactory.create_chat_messages(f"Message {i}")
+            TestDataFactory.create_chat_messages(f"Message {i}").to_chat_messages()
             for i in range(4)
         ]
 
@@ -127,7 +127,7 @@ class TestOpenAICompatibleLanguageModel:
             )
 
             messages_lst = [
-                TestDataFactory.create_chat_messages(f"Message {i}")
+                TestDataFactory.create_chat_messages(f"Message {i}").to_chat_messages()
                 for i in range(5)
             ]
 
@@ -143,10 +143,10 @@ class TestOpenAICompatibleLanguageModel:
             max_tries=2
         )
 
-        messages = TestDataFactory.create_chat_messages(TEST_CONSTANTS["ERROR_TRIGGER"])
+        chat_messages = TestDataFactory.create_chat_messages(TEST_CONSTANTS["ERROR_TRIGGER"])
 
         with pytest.raises(Exception) as exc_info:
-            model.generate(messages)
+            model.generate(chat_messages.to_chat_messages())
 
         assert "Server error" in str(exc_info.value)
 
@@ -165,13 +165,13 @@ class TestOpenAICompatibleLanguageModel:
             replace_error_with_message=error_message
         )
 
-        messages = TestDataFactory.create_chat_messages(TEST_CONSTANTS["ERROR_TRIGGER"])
+        chat_messages = TestDataFactory.create_chat_messages(TEST_CONSTANTS["ERROR_TRIGGER"])
 
         if expected_result == Exception:
             with pytest.raises(Exception):
-                model.generate(messages)
+                model.generate(chat_messages.to_chat_messages())
         else:
-            result = model.generate(messages)
+            result = model.generate(chat_messages.to_chat_messages())
             assert result == expected_result
 
     def test_replace_error_with_message_batch(self, openai_server):
@@ -186,9 +186,9 @@ class TestOpenAICompatibleLanguageModel:
         )
 
         messages_lst = [
-            TestDataFactory.create_chat_messages("Hello, world!"),
-            TestDataFactory.create_chat_messages(TEST_CONSTANTS["ERROR_TRIGGER"]),
-            TestDataFactory.create_chat_messages("How are you?")
+            TestDataFactory.create_chat_messages("Hello, world!").to_chat_messages(),
+            TestDataFactory.create_chat_messages(TEST_CONSTANTS["ERROR_TRIGGER"]).to_chat_messages(),
+            TestDataFactory.create_chat_messages("How are you?").to_chat_messages()
         ]
 
         results = model.generate(messages_lst)

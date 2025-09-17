@@ -6,6 +6,7 @@ from typing import List
 import pytest
 
 from its_hub.algorithms.self_consistency import _select_most_common_or_random, _select_hierarchical_most_common_or_random, SelfConsistency, SelfConsistencyResult, create_regex_projection_function
+from its_hub.types import ChatMessages
 from its_hub.algorithms.beam_search import BeamSearch, BeamSearchResult, Path
 from its_hub.algorithms.particle_gibbs import (
     ParticleGibbs, ParticleGibbsResult, ParticleFiltering, ParticleFilteringResult,
@@ -117,6 +118,24 @@ class TestSelfConsistency:
         
         assert isinstance(result, str)
         assert result in ["a1", "a2"]  # Should be one of the "a" responses
+
+    def test_self_consistency_with_chat_messages_class(self):
+        """Test SelfConsistency with ChatMessages class input."""
+        mock_lm = StepMockLanguageModel(["answer1", "answer2", "answer1", "answer3"])
+        
+        def flat_projection(response: str) -> str:
+            return response[-1]  # Last character
+        
+        sc = SelfConsistency(flat_projection)
+        
+        # Test with ChatMessages wrapping a string
+        chat_messages = ChatMessages("test prompt")
+        result = sc.infer(mock_lm, chat_messages, budget=4, return_response_only=False)
+        
+        assert isinstance(result, SelfConsistencyResult)
+        assert len(result.responses) == 4
+        # "1" appears twice (from "answer1"), should be selected
+        assert result.the_one in ["answer1", "answer1"]
 
     def test_create_regex_projection_function_single_pattern(self):
         """Test creating projection function from single regex pattern."""

@@ -1,20 +1,23 @@
 """Test data factories for consistent test data generation."""
 
 from typing import List, Dict, Any
-from its_hub.integration.iaas import ChatMessage
+from its_hub.types import ChatMessage, ChatMessages
 
 
 class TestDataFactory:
     """Factory for creating consistent test data."""
     
     @staticmethod
-    def create_chat_messages(user_content: str = "Hello", system_content: str = None) -> List[Dict[str, str]]:
-        """Create standard chat messages for testing."""
-        messages = []
+    def create_chat_messages(user_content: str = "Hello", system_content: str = None) -> ChatMessages:
+        """Create ChatMessages object for testing."""
         if system_content:
-            messages.append({"role": "system", "content": system_content})
-        messages.append({"role": "user", "content": user_content})
-        return messages
+            messages = [
+                ChatMessage(role="system", content=system_content),
+                ChatMessage(role="user", content=user_content)
+            ]
+            return ChatMessages(messages)
+        else:
+            return ChatMessages(user_content)  # Simple string case
     
     @staticmethod
     def create_chat_completion_request(
@@ -27,7 +30,7 @@ class TestDataFactory:
         """Create a standard chat completion request."""
         request = {
             "model": model,
-            "messages": TestDataFactory.create_chat_messages(user_content, system_content),
+            "messages": TestDataFactory.create_chat_messages(user_content, system_content).to_chat_messages(),
             "budget": budget
         }
         request.update(kwargs)
