@@ -78,8 +78,8 @@ class AbstractOutcomeRewardModel(ABC):
     """abstract base class for outcome reward models"""
 
     @abstractmethod
-    def score(self, prompt: str, response: str) -> float:
-        """the score for a given prompt and response"""
+    def score(self, prompt_or_messages: str | list[ChatMessage] | ChatMessages, response: str) -> float:
+        """the score for a given conversation context and response"""
         pass
 
 
@@ -88,6 +88,6 @@ class AbstractProcessRewardModel(ABC):
     """abstract base class for process reward models"""
 
     @abstractmethod
-    def score(self, prompt: str, steps: list[str]) -> list[float]:
-        """the score for a given prompt and steps"""
+    def score(self, prompt_or_messages: str | list[ChatMessage] | ChatMessages, steps: list[str]) -> list[float]:
+        """the score for a given conversation context and steps"""
         pass

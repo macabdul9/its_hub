@@ -1,6 +1,7 @@
 from reward_hub.base import AggregationMethod
 
 from its_hub.base import AbstractProcessRewardModel
+from its_hub.types import ChatMessage, ChatMessages
 
 
 class LocalVllmProcessRewardModel(AbstractProcessRewardModel):
@@ -12,13 +13,22 @@ class LocalVllmProcessRewardModel(AbstractProcessRewardModel):
         self.model = VllmProcessRewardModel(model_name=model_name, device=device)
         self.aggregation_method = aggregation_method
 
-    def score(self, prompt: str, response_or_responses: str | list[str]) -> float:
+    def score(self, prompt_or_messages: str | list[ChatMessage] | ChatMessages, response_or_responses: str | list[str]) -> float:
+        # Convert to uniform ChatMessages format
+        if not isinstance(prompt_or_messages, ChatMessages):
+            prompt_or_messages = ChatMessages(prompt_or_messages)
+        
         is_single_response = isinstance(response_or_responses, str)
+        responses = [response_or_responses] if is_single_response else response_or_responses
+        
+        # Build conversation messages with responses (convert system to user for reward model compatibility)
+        base_msgs = [
+            ChatMessage(role="user", content=f"System: {msg.content}") if msg.role == "system" else msg
+            for msg in prompt_or_messages.to_chat_messages()
+        ]
         messages = [
-            [{"role": "user", "content": prompt}, {"role": "assistant", "content": r}]
-            for r in (
-                [response_or_responses] if is_single_response else response_or_responses
-            )
+            [msg.__dict__ for msg in base_msgs + [ChatMessage(role="assistant", content=response)]]
+            for response in responses
         ]
         res = self.model.score(
             messages=messages,

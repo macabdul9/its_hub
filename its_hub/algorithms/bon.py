@@ -43,11 +43,11 @@ class BestOfN(AbstractScalingAlgorithm):
         # Currently hardcoded to True, will be addressed in future PR
         batched = True
         if batched:
-            scores = self.orm.score(prompt_or_messages.to_string(), responses)
+            scores = self.orm.score(prompt_or_messages, responses)
         else:
             scores = []
             for r in responses:
-                scores.append(self.orm.score(prompt_or_messages.to_string(), r))
+                scores.append(self.orm.score(prompt_or_messages, r))
 
         # select the best response
         selected_index = scores.index(max(scores))
