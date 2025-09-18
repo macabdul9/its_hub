@@ -1,14 +1,15 @@
 """Test data factories for consistent test data generation."""
 
-from typing import List, Dict, Any
+from typing import Any
+
 from its_hub.types import ChatMessage, ChatMessages
 
 
 class TestDataFactory:
     """Factory for creating consistent test data."""
-    
+
     @staticmethod
-    def create_chat_messages(user_content: str = "Hello", system_content: str = None) -> ChatMessages:
+    def create_chat_messages(user_content: str = "Hello", system_content: str | None = None) -> ChatMessages:
         """Create ChatMessages object for testing."""
         if system_content:
             messages = [
@@ -18,15 +19,15 @@ class TestDataFactory:
             return ChatMessages(messages)
         else:
             return ChatMessages(user_content)  # Simple string case
-    
+
     @staticmethod
     def create_chat_completion_request(
         model: str = "test-model",
         user_content: str = "Hello",
         budget: int = 4,
-        system_content: str = None,
+        system_content: str | None = None,
         **kwargs
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a standard chat completion request."""
         chat_messages = TestDataFactory.create_chat_messages(user_content, system_content).to_chat_messages()
         request = {
@@ -36,7 +37,7 @@ class TestDataFactory:
         }
         request.update(kwargs)
         return request
-    
+
     @staticmethod
     def create_config_request(
         endpoint: str = "http://localhost:8000",
@@ -44,7 +45,7 @@ class TestDataFactory:
         model: str = "test-model",
         alg: str = "best-of-n",
         **kwargs
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a standard configuration request."""
         config = {
             "endpoint": endpoint,
@@ -56,19 +57,19 @@ class TestDataFactory:
         }
         config.update(kwargs)
         return config
-    
+
     @staticmethod
-    def create_error_trigger_request(trigger: str = "trigger_error") -> Dict[str, Any]:
+    def create_error_trigger_request(trigger: str = "trigger_error") -> dict[str, Any]:
         """Create a request that triggers errors for testing."""
         return TestDataFactory.create_chat_completion_request(user_content=trigger)
-    
+
     @staticmethod
-    def create_multiple_responses(base: str = "response", count: int = 3) -> List[str]:
+    def create_multiple_responses(base: str = "response", count: int = 3) -> list[str]:
         """Create multiple response strings for testing."""
         return [f"{base}{i+1}" for i in range(count)]
-    
+
     @staticmethod
-    def create_score_sequence(base_score: float = 0.5, count: int = 3, increment: float = 0.1) -> List[float]:
+    def create_score_sequence(base_score: float = 0.5, count: int = 3, increment: float = 0.1) -> list[float]:
         """Create a sequence of scores for testing."""
         return [base_score + (i * increment) for i in range(count)]
 

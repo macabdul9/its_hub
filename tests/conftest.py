@@ -5,8 +5,6 @@ import socket
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Dict, Any, List, Optional
-from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -24,21 +22,21 @@ def find_free_port() -> int:
 
 class DummyVLLMHandler(BaseHTTPRequestHandler):
     """A dummy HTTP handler that mimics a vLLM server."""
-    
+
     def do_POST(self):
         """Handle POST requests to the /v1/chat/completions endpoint."""
         if self.path == "/v1/chat/completions":
             content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length)
             request_data = json.loads(post_data.decode('utf-8'))
-            
+
             # Simulate some processing time
             time.sleep(0.01)
-            
+
             # Extract the user message
             messages = request_data.get("messages", [])
             user_content = messages[-1]['content'] if messages else "unknown"
-            
+
             # Check for error triggers
             if "error" in user_content.lower():
                 self.send_response(500)
@@ -53,17 +51,17 @@ class DummyVLLMHandler(BaseHTTPRequestHandler):
                 }
                 self.wfile.write(json.dumps(error_response).encode('utf-8'))
                 return
-            
+
             # Create a response that includes the request content for testing
             response_content = f"vLLM response to: {user_content}"
-            
+
             # Check if we should include stop tokens
             stop = request_data.get("stop")
             include_stop = request_data.get("include_stop_str_in_output", False)
-            
+
             if stop and include_stop:
                 response_content += stop
-            
+
             # Create vLLM-like response
             response = {
                 "id": "vllm-test-id",
@@ -86,7 +84,7 @@ class DummyVLLMHandler(BaseHTTPRequestHandler):
                     "total_tokens": 25
                 }
             }
-            
+
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
@@ -95,7 +93,7 @@ class DummyVLLMHandler(BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
             self.wfile.write(b"Not Found")
-    
+
     def log_message(self, format, *args):
         """Suppress log messages to keep test output clean."""
         pass
@@ -103,37 +101,37 @@ class DummyVLLMHandler(BaseHTTPRequestHandler):
 
 class DummyOpenAIHandler(BaseHTTPRequestHandler):
     """A dummy HTTP handler that mimics the OpenAI API."""
-    
+
     # Class-level variables to track concurrent requests
     active_requests = 0
     max_concurrent_requests = 0
     request_lock = threading.Lock()
-    
+
     @classmethod
     def reset_stats(cls):
         """Reset the request statistics."""
         with cls.request_lock:
             cls.active_requests = 0
             cls.max_concurrent_requests = 0
-    
+
     def do_POST(self):
         """Handle POST requests to the /chat/completions endpoint."""
         if self.path == "/chat/completions":
             content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length)
             request_data = json.loads(post_data.decode('utf-8'))
-            
+
             # Track concurrent requests
             with self.__class__.request_lock:
                 self.__class__.active_requests += 1
                 self.__class__.max_concurrent_requests = max(
-                    self.__class__.max_concurrent_requests, 
+                    self.__class__.max_concurrent_requests,
                     self.__class__.active_requests
                 )
-            
+
             # Simulate some processing time
             time.sleep(0.1)
-            
+
             # Check if we should simulate an error
             if "trigger_error" in request_data.get("messages", [{}])[-1].get("content", ""):
                 self.send_response(500)
@@ -147,26 +145,26 @@ class DummyOpenAIHandler(BaseHTTPRequestHandler):
                     }
                 }
                 self.wfile.write(json.dumps(error_response).encode('utf-8'))
-                
+
                 # Decrement active requests
                 with self.__class__.request_lock:
                     self.__class__.active_requests -= 1
-                
+
                 return
-            
+
             # Extract the messages from the request
             messages = request_data.get("messages", [])
-            
+
             # Prepare a response based on the messages
             response_content = f"Response to: {messages[-1]['content']}"
-            
+
             # Check if there's a stop sequence and we should include it
             stop = request_data.get("stop")
             include_stop = request_data.get("include_stop_str_in_output", False)
-            
+
             if stop and include_stop:
                 response_content += stop
-            
+
             # Create an OpenAI-like response
             response = {
                 "id": "dummy-id",
@@ -184,13 +182,13 @@ class DummyOpenAIHandler(BaseHTTPRequestHandler):
                     }
                 ]
             }
-            
+
             # Send the response
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps(response).encode('utf-8'))
-            
+
             # Decrement active requests
             with self.__class__.request_lock:
                 self.__class__.active_requests -= 1
@@ -198,7 +196,7 @@ class DummyOpenAIHandler(BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
             self.wfile.write(b"Not Found")
-    
+
     def log_message(self, format, *args):
         """Suppress log messages to keep test output clean."""
         pass
@@ -206,11 +204,11 @@ class DummyOpenAIHandler(BaseHTTPRequestHandler):
 
 class MockLanguageModel(AbstractLanguageModel):
     """Mock language model for testing."""
-    
-    def __init__(self, responses: List[str]):
+
+    def __init__(self, responses: list[str]):
         self.responses = responses
         self.call_count = 0
-        
+
     def generate(self, messages, stop=None, temperature=None, include_stop_str_in_output=None):
         if isinstance(messages, list) and len(messages) > 0 and isinstance(messages[0], list):
             # Batched generation - messages is List[List[ChatMessage]]
@@ -233,21 +231,21 @@ class MockLanguageModel(AbstractLanguageModel):
                 response = self.responses[self.call_count]
             self.call_count += 1
             return response
-            
-    def evaluate(self, prompt: str, generation: str) -> List[float]:
+
+    def evaluate(self, prompt: str, generation: str) -> list[float]:
         return [0.1] * len(generation.split())
 
 
 class MockOutcomeRewardModel(AbstractOutcomeRewardModel):
     """Mock outcome reward model for testing."""
-    
-    def __init__(self, scores: List[float]):
+
+    def __init__(self, scores: list[float]):
         if isinstance(scores, float):
             self.scores = [scores]
         else:
             self.scores = scores
         self.call_count = 0
-        
+
     def score(self, prompt: str, response) -> float:
         if isinstance(response, list):
             scores = self.scores[self.call_count:self.call_count + len(response)]
@@ -261,14 +259,14 @@ class MockOutcomeRewardModel(AbstractOutcomeRewardModel):
 
 class MockProcessRewardModel:
     """Mock process reward model for testing."""
-    
-    def __init__(self, scores: List[float]):
+
+    def __init__(self, scores: list[float]):
         if isinstance(scores[0], list):
             self.scores = [score for sublist in scores for score in sublist]
         else:
             self.scores = scores
         self.call_count = 0
-        
+
     def score(self, prompt: str, response) -> float:
         if isinstance(response, list):
             scores = []
@@ -292,12 +290,12 @@ def vllm_server():
     server_thread = threading.Thread(target=server.serve_forever)
     server_thread.daemon = True
     server_thread.start()
-    
+
     # Give the server a moment to start
     time.sleep(0.1)
-    
+
     yield f"http://localhost:{port}"
-    
+
     server.shutdown()
     server_thread.join()
 
@@ -310,12 +308,12 @@ def openai_server():
     server_thread = threading.Thread(target=server.serve_forever)
     server_thread.daemon = True
     server_thread.start()
-    
+
     # Give the server a moment to start
     time.sleep(0.1)
-    
+
     yield f"http://localhost:{port}"
-    
+
     server.shutdown()
     server_thread.join()
 
@@ -327,7 +325,7 @@ def iaas_client():
     import its_hub.integration.iaas as iaas_module
     iaas_module.LM_DICT.clear()
     iaas_module.SCALING_ALG = None
-    
+
     return TestClient(app)
 
 

@@ -1,20 +1,20 @@
 """Mock reward models for testing."""
 
-from typing import List, Union
+
 from its_hub.base import AbstractOutcomeRewardModel
 
 
 class MockOutcomeRewardModel(AbstractOutcomeRewardModel):
     """Mock outcome reward model with configurable scores."""
-    
-    def __init__(self, scores: Union[List[float], float]):
+
+    def __init__(self, scores: list[float] | float):
         if isinstance(scores, float):
             self.scores = [scores]
         else:
             self.scores = scores
         self.call_count = 0
-        
-    def score(self, prompt: str, response: Union[str, List[str]]) -> Union[float, List[float]]:
+
+    def score(self, prompt: str, response: str | list[str]) -> float | list[float]:
         if isinstance(response, list):
             scores = []
             for i in range(len(response)):
@@ -30,16 +30,16 @@ class MockOutcomeRewardModel(AbstractOutcomeRewardModel):
 
 class MockProcessRewardModel:
     """Mock process reward model with configurable scores."""
-    
-    def __init__(self, scores: Union[List[float], List[List[float]]]):
+
+    def __init__(self, scores: list[float] | list[list[float]]):
         if isinstance(scores[0], list):
             # Flatten nested lists
             self.scores = [score for sublist in scores for score in sublist]
         else:
             self.scores = scores
         self.call_count = 0
-        
-    def score(self, prompt: str, response: Union[str, List[str]]) -> Union[float, List[float]]:
+
+    def score(self, prompt: str, response: str | list[str]) -> float | list[float]:
         if isinstance(response, list):
             scores = []
             for i in range(len(response)):
@@ -55,12 +55,12 @@ class MockProcessRewardModel:
 
 class HighVarianceRewardModel:
     """Mock reward model with high variance for testing edge cases."""
-    
+
     def __init__(self):
         self.scores = [0.0, 1.0, 0.5, 0.1, 0.9, 0.3, 0.7, 0.2, 0.8, 0.4]
         self.call_count = 0
-        
-    def score(self, prompt: str, response: Union[str, List[str]]) -> Union[float, List[float]]:
+
+    def score(self, prompt: str, response: str | list[str]) -> float | list[float]:
         if isinstance(response, list):
             scores = []
             for i in range(len(response)):
@@ -76,17 +76,17 @@ class HighVarianceRewardModel:
 
 class ErrorRewardModel:
     """Mock reward model that can simulate errors."""
-    
-    def __init__(self, scores: List[float], error_on_calls: List[int] = None):
+
+    def __init__(self, scores: list[float], error_on_calls: list[int] | None = None):
         self.scores = scores
         self.error_on_calls = error_on_calls or []
         self.call_count = 0
-        
-    def score(self, prompt: str, response: Union[str, List[str]]) -> Union[float, List[float]]:
+
+    def score(self, prompt: str, response: str | list[str]) -> float | list[float]:
         if self.call_count in self.error_on_calls:
             self.call_count += 1
             raise Exception("Simulated reward model error")
-            
+
         if isinstance(response, list):
             scores = []
             for i in range(len(response)):

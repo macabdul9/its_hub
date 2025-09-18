@@ -167,8 +167,8 @@ class TestOpenAICompatibleLanguageModel:
 
         chat_messages = TestDataFactory.create_chat_messages(TEST_CONSTANTS["ERROR_TRIGGER"])
 
-        if expected_result == Exception:
-            with pytest.raises(Exception):
+        if expected_result is Exception:
+            with pytest.raises(Exception):  # noqa: B017
                 model.generate(chat_messages.to_chat_messages())
         else:
             result = model.generate(chat_messages.to_chat_messages())

@@ -17,17 +17,17 @@ class LocalVllmProcessRewardModel(AbstractProcessRewardModel):
         # Convert to uniform ChatMessages format
         if not isinstance(prompt_or_messages, ChatMessages):
             prompt_or_messages = ChatMessages(prompt_or_messages)
-        
+
         is_single_response = isinstance(response_or_responses, str)
         responses = [response_or_responses] if is_single_response else response_or_responses
-        
+
         # Build conversation messages with responses (convert system to user for reward model compatibility)
         base_msgs = [
             ChatMessage(role="user", content=f"System: {msg.content}") if msg.role == "system" else msg
             for msg in prompt_or_messages.to_chat_messages()
         ]
         messages = [
-            [msg.__dict__ for msg in base_msgs + [ChatMessage(role="assistant", content=response)]]
+            [*[msg.__dict__ for msg in base_msgs], ChatMessage(role="assistant", content=response).__dict__]
             for response in responses
         ]
         res = self.model.score(
@@ -35,7 +35,4 @@ class LocalVllmProcessRewardModel(AbstractProcessRewardModel):
             aggregation_method=self.aggregation_method,
             return_full_prm_result=False,
         )
-        if is_single_response:
-            return res[0]
-        else:
-            return res
+        return res[0] if is_single_response else res
