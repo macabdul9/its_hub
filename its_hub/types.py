@@ -21,7 +21,7 @@ class ChatMessages:
         self._is_string = isinstance(str_or_messages, str)
 
     @classmethod
-    def from_prompt_or_messages(cls, prompt_or_messages: str | list[ChatMessage] | "ChatMessages") -> "ChatMessages":
+    def from_prompt_or_messages(cls, prompt_or_messages: str | list[ChatMessage] | ChatMessages) -> ChatMessages:
         """Create ChatMessages from various input formats."""
         if isinstance(prompt_or_messages, ChatMessages):
             return prompt_or_messages
