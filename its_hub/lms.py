@@ -265,20 +265,9 @@ class OpenAICompatibleLanguageModel(AbstractLanguageModel):
                 *messages,
             ]
 
-        # Convert ChatMessage objects to dictionaries, excluding None values
-        def message_to_dict(msg):
-            result = {"role": msg.role}
-            if msg.content is not None:
-                result["content"] = msg.content
-            if msg.tool_calls is not None:
-                result["tool_calls"] = msg.tool_calls
-            if msg.tool_call_id is not None:
-                result["tool_call_id"] = msg.tool_call_id
-            return result
-
         request_data = {
             "model": self.model_name,
-            "messages": [message_to_dict(msg) for msg in messages],
+            "messages": [msg.to_dict() for msg in messages],
         }
 
         if self.endpoint_type == "vllm":

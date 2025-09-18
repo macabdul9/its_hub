@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, Union
+from typing import Literal
 
 from pydantic.dataclasses import dataclass
 
@@ -34,6 +34,17 @@ class ChatMessage:
     tool_calls: list[ToolCall] | None = None
     tool_call_id: str | None = None
 
+    def to_dict(self) -> dict:
+        """Convert ChatMessage to dictionary, excluding None values."""
+        result = {"role": self.role}
+        if self.content is not None:
+            result["content"] = self.content
+        if self.tool_calls is not None:
+            result["tool_calls"] = self.tool_calls
+        if self.tool_call_id is not None:
+            result["tool_call_id"] = self.tool_call_id
+        return result
+
 
 class ChatMessages:
     """Unified wrapper for handling both string prompts and conversation history."""
@@ -43,7 +54,9 @@ class ChatMessages:
         self._is_string = isinstance(str_or_messages, str)
 
     @classmethod
-    def from_prompt_or_messages(cls, prompt_or_messages: str | list[ChatMessage] | ChatMessages) -> ChatMessages:
+    def from_prompt_or_messages(
+        cls, prompt_or_messages: str | list[ChatMessage] | ChatMessages
+    ) -> ChatMessages:
         """Create ChatMessages from various input formats."""
         if isinstance(prompt_or_messages, ChatMessages):
             return prompt_or_messages
