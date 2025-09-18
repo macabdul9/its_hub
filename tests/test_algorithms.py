@@ -6,7 +6,7 @@ from typing import List
 import pytest
 
 from its_hub.algorithms.self_consistency import _select_most_common_or_random, _select_hierarchical_most_common_or_random, SelfConsistency, SelfConsistencyResult, create_regex_projection_function
-from its_hub.types import ChatMessages
+from its_hub.types import ChatMessage, ChatMessages
 from its_hub.algorithms.beam_search import BeamSearch, BeamSearchResult, Path
 from its_hub.algorithms.particle_gibbs import (
     ParticleGibbs, ParticleGibbsResult, ParticleFiltering, ParticleFilteringResult,
@@ -347,6 +347,55 @@ class TestBestOfN:
         
         assert result == "response2"
 
+    def test_with_chat_messages_string(self):
+        """Test BestOfN with ChatMessages wrapping a string."""
+        mock_lm = StepMockLanguageModel(["response1", "response2", "response3"])
+        mock_orm = MockOutcomeRewardModel([0.5, 0.8, 0.3])
+        
+        bon = BestOfN(mock_orm)
+        chat_messages = ChatMessages("test prompt")
+        result = bon.infer(mock_lm, chat_messages, budget=3, return_response_only=False)
+        
+        assert isinstance(result, BestOfNResult)
+        assert result.the_one == "response2"
+        assert len(result.responses) == 3
+
+    def test_with_chat_messages_conversation(self):
+        """Test BestOfN with ChatMessages containing conversation history."""
+        mock_lm = StepMockLanguageModel(["response1", "response2", "response3"])
+        mock_orm = MockOutcomeRewardModel([0.5, 0.8, 0.3])
+        
+        # Create conversation history
+        messages = [
+            ChatMessage(role="system", content="You are a helpful assistant"),
+            ChatMessage(role="user", content="What is 2+2?"),
+            ChatMessage(role="assistant", content="2+2=4"),
+            ChatMessage(role="user", content="What about 3+3?")
+        ]
+        chat_messages = ChatMessages(messages)
+        
+        bon = BestOfN(mock_orm)
+        result = bon.infer(mock_lm, chat_messages, budget=3, return_response_only=False)
+        
+        assert isinstance(result, BestOfNResult)
+        assert result.the_one == "response2"
+        # Verify the reward model received the ChatMessages object
+        assert len(result.responses) == 3
+
+    def test_with_list_chat_messages(self):
+        """Test BestOfN with list[ChatMessage] input."""
+        mock_lm = StepMockLanguageModel(["response1", "response2"])
+        mock_orm = MockOutcomeRewardModel([0.3, 0.7])
+        
+        messages = [
+            ChatMessage(role="user", content="Solve this problem")
+        ]
+        
+        bon = BestOfN(mock_orm)
+        result = bon.infer(mock_lm, messages, budget=2, return_response_only=True)
+        
+        assert result == "response2"
+
 
 class TestBeamSearch:
     """Test the Beam Search algorithm."""
@@ -402,6 +451,37 @@ class TestBeamSearch:
         
         assert isinstance(result, BeamSearchResult)
         assert result.selected_index == result.scores.index(max(result.scores))
+
+    def test_with_chat_messages_string(self):
+        """Test BeamSearch with ChatMessages wrapping a string."""
+        mock_lm = StepMockLanguageModel(["step1", "step2"])
+        mock_prm = MockProcessRewardModel([0.7, 0.9])
+        
+        sg = StepGeneration(step_token="\n", max_steps=1)
+        beam_search = BeamSearch(sg, mock_prm, beam_width=2)
+        
+        chat_messages = ChatMessages("Solve this problem:")
+        result = beam_search.infer(mock_lm, chat_messages, budget=2, return_response_only=False)
+        
+        assert isinstance(result, BeamSearchResult)
+        assert isinstance(result.the_one, str)
+
+    def test_with_chat_messages_conversation(self):
+        """Test BeamSearch with ChatMessages containing conversation history."""
+        mock_lm = StepMockLanguageModel(["step1", "step2"])
+        mock_prm = MockProcessRewardModel([0.8, 0.6])
+        
+        messages = [
+            ChatMessage(role="system", content="You are a problem solver"),
+            ChatMessage(role="user", content="Solve step by step:")
+        ]
+        chat_messages = ChatMessages(messages)
+        
+        sg = StepGeneration(step_token="\n", max_steps=1)
+        beam_search = BeamSearch(sg, mock_prm, beam_width=2)
+        result = beam_search.infer(mock_lm, chat_messages, budget=2, return_response_only=True)
+        
+        assert isinstance(result, str)
 
 
 class TestParticleGibbs:
@@ -504,6 +584,37 @@ class TestParticleGibbs:
         with pytest.raises(NotImplementedError, match="Ancestor sampling is not implemented"):
             particle_gibbs.infer(mock_lm, "test prompt", budget=1)
 
+    def test_with_chat_messages_string(self):
+        """Test ParticleGibbs with ChatMessages wrapping a string."""
+        mock_lm = StepMockLanguageModel(["step1", "step2"])
+        mock_prm = MockProcessRewardModel([0.7, 0.6])
+        
+        sg = StepGeneration(step_token="\n", max_steps=1)
+        particle_gibbs = ParticleGibbs(sg, mock_prm, num_iterations=1, selection_method=SelectionMethod.ARGMAX)
+        
+        chat_messages = ChatMessages("Solve this:")
+        result = particle_gibbs.infer(mock_lm, chat_messages, budget=2, return_response_only=False)
+        
+        assert isinstance(result, ParticleGibbsResult)
+        assert isinstance(result.the_one, str)
+
+    def test_with_chat_messages_conversation(self):
+        """Test ParticleGibbs with ChatMessages containing conversation history."""
+        mock_lm = StepMockLanguageModel(["step1", "step2"])
+        mock_prm = MockProcessRewardModel([0.8, 0.5])
+        
+        messages = [
+            ChatMessage(role="system", content="Solve step by step"),
+            ChatMessage(role="user", content="Problem:")
+        ]
+        chat_messages = ChatMessages(messages)
+        
+        sg = StepGeneration(step_token="\n", max_steps=1)
+        particle_gibbs = ParticleGibbs(sg, mock_prm, num_iterations=1, selection_method=SelectionMethod.ARGMAX)
+        result = particle_gibbs.infer(mock_lm, chat_messages, budget=2, return_response_only=True)
+        
+        assert isinstance(result, str)
+
 
 class TestParticleFiltering:
     """Test the Particle Filtering algorithm (special case of Particle Gibbs)."""
@@ -538,3 +649,34 @@ class TestParticleFiltering:
         # Should return just the string response
         assert isinstance(result, str)
         assert result  # Should not be empty
+
+    def test_with_chat_messages_string(self):
+        """Test ParticleFiltering with ChatMessages wrapping a string."""
+        mock_lm = StepMockLanguageModel(["step1", "step2"])
+        mock_prm = MockProcessRewardModel([0.7, 0.6])
+        
+        sg = StepGeneration(step_token="\n", max_steps=1)
+        particle_filtering = ParticleFiltering(sg, mock_prm, selection_method=SelectionMethod.ARGMAX)
+        
+        chat_messages = ChatMessages("Solve this:")
+        result = particle_filtering.infer(mock_lm, chat_messages, budget=2, return_response_only=False)
+        
+        assert isinstance(result, ParticleFilteringResult)
+        assert isinstance(result.the_one, str)
+
+    def test_with_chat_messages_conversation(self):
+        """Test ParticleFiltering with ChatMessages containing conversation history."""
+        mock_lm = StepMockLanguageModel(["step1", "step2"])
+        mock_prm = MockProcessRewardModel([0.8, 0.5])
+        
+        messages = [
+            ChatMessage(role="system", content="You are a step-by-step solver"),
+            ChatMessage(role="user", content="Please solve:")
+        ]
+        chat_messages = ChatMessages(messages)
+        
+        sg = StepGeneration(step_token="\n", max_steps=1)
+        particle_filtering = ParticleFiltering(sg, mock_prm, selection_method=SelectionMethod.ARGMAX)
+        result = particle_filtering.infer(mock_lm, chat_messages, budget=2, return_response_only=True)
+        
+        assert isinstance(result, str)
