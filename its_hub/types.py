@@ -27,8 +27,8 @@ class ChatMessages:
             return prompt_or_messages
         return cls(prompt_or_messages)
 
-    def to_string(self) -> str:
-        """Convert to string representation."""
+    def to_prompt(self) -> str:
+        """Convert to prompt string representation."""
         if self._is_string:
             return self._str_or_messages
         return "\n".join(f"{msg.role}: {msg.content}" for msg in self._str_or_messages)

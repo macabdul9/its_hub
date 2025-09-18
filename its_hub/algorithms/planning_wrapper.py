@@ -149,7 +149,7 @@ class PlanningWrapper(AbstractScalingAlgorithm):
         """
         # Step 1: Generate plan (uses 1 generation from budget)
         # TODO: Update PlanningPromptTemplate to support native ChatMessages format instead of string conversion
-        planning_prompt = PlanningPromptTemplate.create_planning_prompt(chat_messages.to_string())
+        planning_prompt = PlanningPromptTemplate.create_planning_prompt(chat_messages.to_prompt())
         plan = lm.generate([ChatMessage(role="user", content=planning_prompt)])
 
         # Step 2: Parse approaches from plan
@@ -182,7 +182,7 @@ class PlanningWrapper(AbstractScalingAlgorithm):
             # Create approach-specific prompt
             # TODO: Update ApproachPromptTemplate to support native ChatMessages format instead of string conversion
             approach_prompt = ApproachPromptTemplate.create_approach_prompt(
-                chat_messages.to_string(), approach
+                chat_messages.to_prompt(), approach
             )
 
             # Run base algorithm for this approach
