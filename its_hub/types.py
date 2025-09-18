@@ -8,7 +8,7 @@ from pydantic.dataclasses import dataclass
 @dataclass
 class Function:
     """Function definition for tool calls."""
-    
+
     name: str
     description: str | None = None
     parameters: dict | None = None
@@ -17,7 +17,7 @@ class Function:
 @dataclass
 class ToolCall:
     """A tool call made by the assistant."""
-    
+
     id: str
     type: Literal["function"] = "function"
     function: Function | None = None
@@ -44,7 +44,7 @@ class ChatMessages:
         """Convert to string representation."""
         if self._is_string:
             return self._str_or_messages
-        
+
         lines = []
         for msg in self._str_or_messages:
             if msg.role == "tool":
@@ -64,7 +64,7 @@ class ChatMessages:
             else:
                 # Regular messages
                 lines.append(f"{msg.role}: {msg.content}")
-        
+
         return "\n".join(lines)
 
     def to_chat_messages(self) -> list[ChatMessage]:
