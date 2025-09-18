@@ -28,9 +28,10 @@ class TestDataFactory:
         **kwargs
     ) -> Dict[str, Any]:
         """Create a standard chat completion request."""
+        chat_messages = TestDataFactory.create_chat_messages(user_content, system_content).to_chat_messages()
         request = {
             "model": model,
-            "messages": TestDataFactory.create_chat_messages(user_content, system_content).to_chat_messages(),
+            "messages": [msg.__dict__ for msg in chat_messages],  # Convert to dict for JSON serialization
             "budget": budget
         }
         request.update(kwargs)

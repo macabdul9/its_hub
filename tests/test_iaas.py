@@ -196,7 +196,12 @@ class TestChatCompletions:
         # Verify the scaling algorithm was called correctly
         mock_scaling_alg.infer.assert_called_once()
         call_args = mock_scaling_alg.infer.call_args
-        assert call_args[0][1] == "Solve 2+2"  # prompt
+        
+        # Check that ChatMessages object was passed with correct content
+        chat_messages_arg = call_args[0][1]
+        from its_hub.types import ChatMessages
+        assert isinstance(chat_messages_arg, ChatMessages)
+        assert chat_messages_arg.to_string() == "user: Solve 2+2"  # ChatMessages string representation
         assert call_args[0][2] == 8  # budget
 
     def test_chat_completions_with_system_message(self, iaas_client, vllm_server):
