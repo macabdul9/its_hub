@@ -12,6 +12,7 @@ from its_hub.base import (
     AbstractScalingResult,
 )
 from its_hub.lms import StepGeneration
+from its_hub.types import ChatMessage, ChatMessages
 
 
 @dataclass
@@ -186,10 +187,13 @@ class ParticleGibbs(AbstractScalingAlgorithm):
     def infer(
         self,
         lm: AbstractLanguageModel,
-        prompt: str,
+        prompt_or_messages: str | list[ChatMessage] | ChatMessages,
         budget: int,
         return_response_only: bool = True,
     ) -> str | ParticleGibbsResult:
+        # Convert to uniform ChatMessages format
+        if not isinstance(prompt_or_messages, ChatMessages):
+            prompt_or_messages = ChatMessages(prompt_or_messages)
         assert budget % self.num_iterations == 0, (
             "budget must be divisible by num_iterations"
         )
@@ -213,7 +217,7 @@ class ParticleGibbs(AbstractScalingAlgorithm):
             current_step = 0  # Track current step outside the loop
 
             while not all(p.is_stopped for p in particles):
-                particles = self._propagate(lm, particles, prompt, batched=True)
+                particles = self._propagate(lm, particles, prompt_or_messages.to_string(), batched=True)
                 current_step += 1  # Increment after propagation
 
                 # resampling (free) particles
@@ -310,11 +314,11 @@ class ParticleFiltering(ParticleGibbs):
     def infer(
         self,
         lm: AbstractLanguageModel,
-        prompt: str,
+        prompt_or_messages: str | list[ChatMessage] | ChatMessages,
         budget: int,
         return_response_only: bool = True,
     ) -> str | ParticleFilteringResult:
-        result = super().infer(lm, prompt, budget, return_response_only=False)
+        result = super().infer(lm, prompt_or_messages, budget, return_response_only=False)
 
         # Flatten the single-iteration result
         flattened_result = ParticleFilteringResult(

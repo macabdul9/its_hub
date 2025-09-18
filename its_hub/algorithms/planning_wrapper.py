@@ -8,7 +8,7 @@ from its_hub.base import (
     AbstractScalingAlgorithm,
     AbstractScalingResult,
 )
-from its_hub.types import ChatMessage
+from its_hub.types import ChatMessage, ChatMessages
 
 
 @dataclass
@@ -130,10 +130,13 @@ class PlanningWrapper(AbstractScalingAlgorithm):
     def infer(
         self,
         lm: AbstractLanguageModel,
-        prompt: str,
+        prompt_or_messages: str | list[ChatMessage] | ChatMessages,
         budget: int,
         return_response_only: bool = True,
     ) -> str | PlanningWrappedResult:
+        # Convert to uniform ChatMessages format
+        if not isinstance(prompt_or_messages, ChatMessages):
+            prompt_or_messages = ChatMessages(prompt_or_messages)
         """Run Planning-Enhanced version of the base algorithm.
 
         Args:
@@ -146,7 +149,7 @@ class PlanningWrapper(AbstractScalingAlgorithm):
             Best response string or full result object
         """
         # Step 1: Generate plan (uses 1 generation from budget)
-        planning_prompt = PlanningPromptTemplate.create_planning_prompt(prompt)
+        planning_prompt = PlanningPromptTemplate.create_planning_prompt(prompt_or_messages.to_string())
         plan = lm.generate([ChatMessage(role="user", content=planning_prompt)])
 
         # Step 2: Parse approaches from plan
@@ -178,7 +181,7 @@ class PlanningWrapper(AbstractScalingAlgorithm):
 
             # Create approach-specific prompt
             approach_prompt = ApproachPromptTemplate.create_approach_prompt(
-                prompt, approach
+                prompt_or_messages.to_string(), approach
             )
 
             # Run base algorithm for this approach
