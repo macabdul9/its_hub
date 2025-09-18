@@ -55,7 +55,7 @@ class StepMockLanguageModel(AbstractLanguageModel):
 class ErrorMockLanguageModel(AbstractLanguageModel):
     """Mock language model that can simulate errors."""
 
-    def __init__(self, responses: list[str], error_on_calls: list[int] = None):
+    def __init__(self, responses: list[str], error_on_calls: list[int] | None = None):
         self.responses = responses
         self.error_on_calls = error_on_calls or []
         self.call_count = 0

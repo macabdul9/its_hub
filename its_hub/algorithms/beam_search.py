@@ -10,6 +10,7 @@ from its_hub.base import (
     AbstractScalingResult,
 )
 from its_hub.lms import StepGeneration
+from its_hub.types import ChatMessage, ChatMessages
 
 
 @dataclass
@@ -128,10 +129,12 @@ class BeamSearch(AbstractScalingAlgorithm):
     def infer(
         self,
         lm: AbstractLanguageModel,
-        prompt: str,
+        prompt_or_messages: str | list[ChatMessage] | ChatMessages,
         budget: int,
         return_response_only: bool = True,
     ) -> str | BeamSearchResult:
+        # Convert to uniform ChatMessages format
+        chat_messages = ChatMessages.from_prompt_or_messages(prompt_or_messages)
         assert budget % self.beam_width == 0, "budget must be divisible by beam_width"
         assert budget >= self.beam_width, (
             "budget must be greater than or equal to beam_width"
@@ -144,7 +147,8 @@ class BeamSearch(AbstractScalingAlgorithm):
         ]
 
         while not all(c.is_stopped for c in candidates):
-            candidates = self._search_one_level(lm, candidates, prompt, batched=True)
+            # TODO: Update _search_one_level to support native ChatMessages format instead of string conversion
+            candidates = self._search_one_level(lm, candidates, chat_messages.to_prompt(), batched=True)
 
             # get the top beam_width candidates
             candidates.sort(key=lambda x: x.score, reverse=True)

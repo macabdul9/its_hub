@@ -10,7 +10,7 @@ from its_hub.base import (
     AbstractScalingAlgorithm,
     AbstractScalingResult,
 )
-from its_hub.types import ChatMessage
+from its_hub.types import ChatMessage, ChatMessages
 
 
 @dataclass
@@ -109,14 +109,15 @@ class SelfConsistency(AbstractScalingAlgorithm):
     def infer(
         self,
         lm: AbstractLanguageModel,
-        prompt: str,
+        prompt_or_messages: str | list[ChatMessage] | ChatMessages,
         budget: int,
         return_response_only: bool = True,
     ) -> str | SelfConsistencyResult:
+        # Convert to uniform ChatMessages format
+        chat_messages = ChatMessages.from_prompt_or_messages(prompt_or_messages)
+
         # generate responses
-        responses = lm.generate(
-            [[ChatMessage(role="user", content=prompt)] for _ in range(budget)]
-        )
+        responses = lm.generate(chat_messages.to_batch(budget))
 
         # project responses into consistency space
         responses_projected = [

@@ -6,7 +6,7 @@ from its_hub.base import (
     AbstractScalingAlgorithm,
     AbstractScalingResult,
 )
-from its_hub.types import ChatMessage
+from its_hub.types import ChatMessage, ChatMessages
 
 
 @dataclass
@@ -27,25 +27,26 @@ class BestOfN(AbstractScalingAlgorithm):
     def infer(
         self,
         lm: AbstractLanguageModel,
-        prompt: str,
+        prompt_or_messages: str | list[ChatMessage] | ChatMessages,
         budget: int,
         return_response_only: bool = True,
     ) -> str | BestOfNResult:
+        # Convert to uniform ChatMessages format
+        chat_messages = ChatMessages.from_prompt_or_messages(prompt_or_messages)
+
         # generate responses
-        responses = lm.generate(
-            [[ChatMessage(role="user", content=prompt)] for _ in range(budget)]
-        )
+        responses = lm.generate(chat_messages.to_batch(budget))
 
         # score responses
         # TODO: make batched a configurable parameter or remove non-batched branch
         # Currently hardcoded to True, will be addressed in future PR
         batched = True
         if batched:
-            scores = self.orm.score(prompt, responses)
+            scores = self.orm.score(chat_messages, responses)
         else:
             scores = []
             for r in responses:
-                scores.append(self.orm.score(prompt, r))
+                scores.append(self.orm.score(chat_messages, r))
 
         # select the best response
         selected_index = scores.index(max(scores))

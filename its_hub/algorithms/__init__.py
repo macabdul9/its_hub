@@ -28,6 +28,7 @@ from its_hub.base import (
     AbstractScalingResult,
 )
 from its_hub.lms import StepGeneration
+from its_hub.types import ChatMessage, ChatMessages
 
 
 class MetropolisHastingsResult(AbstractScalingResult):
@@ -44,10 +45,12 @@ class MetropolisHastings(AbstractScalingAlgorithm):
     def infer(
         self,
         lm: AbstractLanguageModel,
-        prompt: str,
+        prompt_or_messages: str | list[ChatMessage] | ChatMessages,
         budget: int,
         show_progress: bool = False,
         return_response_only: bool = True,
     ) -> str | MetropolisHastingsResult:
+        # Convert to uniform ChatMessages format
+        chat_messages = ChatMessages.from_prompt_or_messages(prompt_or_messages)
         # TODO: Implement Metropolis-Hastings algorithm
         raise NotImplementedError("Metropolis-Hastings algorithm not yet implemented")

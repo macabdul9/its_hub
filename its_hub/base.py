@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from .types import ChatMessage
+from .types import ChatMessage, ChatMessages
 
 
 class AbstractLanguageModel(ABC):
@@ -55,7 +55,7 @@ class AbstractScalingAlgorithm(ABC):
     def infer(
         self,
         lm: AbstractLanguageModel,
-        prompt: str,
+        prompt_or_messages: str | list[ChatMessage] | ChatMessages,
         budget: int,
         return_response_only: bool = True,
     ) -> str | AbstractScalingResult:
@@ -64,7 +64,7 @@ class AbstractScalingAlgorithm(ABC):
 
         Args:
             lm: a language model that takes a prompt and returns a response
-            prompt: the input prompt
+            prompt_or_messages: the input prompt (string) or conversation history (list of ChatMessage) or ChatMessages object
             budget: the computational budget for inference
             return_response_only: whether to return only the selected response
 
@@ -78,8 +78,8 @@ class AbstractOutcomeRewardModel(ABC):
     """abstract base class for outcome reward models"""
 
     @abstractmethod
-    def score(self, prompt: str, response: str) -> float:
-        """the score for a given prompt and response"""
+    def score(self, prompt_or_messages: str | list[ChatMessage] | ChatMessages, response: str) -> float:
+        """the score for a given conversation context and response"""
         pass
 
 
@@ -88,6 +88,6 @@ class AbstractProcessRewardModel(ABC):
     """abstract base class for process reward models"""
 
     @abstractmethod
-    def score(self, prompt: str, steps: list[str]) -> list[float]:
-        """the score for a given prompt and steps"""
+    def score(self, prompt_or_messages: str | list[ChatMessage] | ChatMessages, steps: list[str]) -> list[float]:
+        """the score for a given conversation context and steps"""
         pass

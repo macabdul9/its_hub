@@ -17,7 +17,7 @@ from .error_handling import (
 from .types import ChatMessage
 
 
-def rstrip_iff_entire(s, subs):
+def rstrip_iff_entire(s: str, subs: str) -> str:
     if s.endswith(subs):
         # If s ends with subs, return the string without the length of subs at the end
         return s[: -len(subs)]
@@ -239,12 +239,12 @@ class OpenAICompatibleLanguageModel(AbstractLanguageModel):
 
     def _prepare_request_data(
         self,
-        messages,
+        messages: list[ChatMessage],
         stop: str | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
         include_stop_str_in_output: bool | None = None,
-    ):
+    ) -> dict:
         # helper method to prepare request data for both sync and async methods
         # Convert dict messages to Message objects if needed
         messages = [
@@ -300,7 +300,7 @@ class OpenAICompatibleLanguageModel(AbstractLanguageModel):
 
     async def _generate(
         self,
-        messages_lst,
+        messages_lst: list[list[ChatMessage]],
         stop: str | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
@@ -321,7 +321,7 @@ class OpenAICompatibleLanguageModel(AbstractLanguageModel):
                 on_backoff=enhanced_on_backoff,
                 giveup=lambda e: not should_retry(e),
             )
-            async def fetch_response(messages, _temperature):
+            async def fetch_response(messages: list[ChatMessage], _temperature: float | None) -> str:
                 async with semaphore:
                     request_data = self._prepare_request_data(
                         messages,
@@ -345,7 +345,7 @@ class OpenAICompatibleLanguageModel(AbstractLanguageModel):
                         response_json = await response.json()
                         return response_json["choices"][0]["message"]["content"]
 
-            async def safe_fetch_response(messages, _temperature):
+            async def safe_fetch_response(messages: list[ChatMessage], _temperature: float | None) -> str:
                 if self.replace_error_with_message is not None:
                     try:
                         return await fetch_response(messages, _temperature)
@@ -373,7 +373,7 @@ class OpenAICompatibleLanguageModel(AbstractLanguageModel):
 
     def generate(
         self,
-        messages_or_messages_lst,
+        messages_or_messages_lst: list[ChatMessage] | list[list[ChatMessage]],
         stop: str | None = None,
         max_tokens: int | None = None,
         temperature: float | list[float] | None = None,
@@ -407,7 +407,7 @@ class OpenAICompatibleLanguageModel(AbstractLanguageModel):
                 on_backoff=enhanced_on_backoff,
                 giveup=lambda e: not should_retry(e),
             )
-            def fetch_single_response(messages, _temperature):
+            def fetch_single_response(messages: list[ChatMessage], _temperature: float | None) -> str:
                 request_data = self._prepare_request_data(
                     messages, stop, max_tokens, _temperature, include_stop_str_in_output
                 )
@@ -427,7 +427,7 @@ class OpenAICompatibleLanguageModel(AbstractLanguageModel):
                 response_json = response.json()
                 return response_json["choices"][0]["message"]["content"]
 
-            def safe_fetch_single_response(messages, _temperature):
+            def safe_fetch_single_response(messages: list[ChatMessage], _temperature: float | None) -> str:
                 if self.replace_error_with_message is not None:
                     try:
                         return fetch_single_response(messages, _temperature)

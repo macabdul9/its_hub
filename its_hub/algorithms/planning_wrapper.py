@@ -8,7 +8,7 @@ from its_hub.base import (
     AbstractScalingAlgorithm,
     AbstractScalingResult,
 )
-from its_hub.types import ChatMessage
+from its_hub.types import ChatMessage, ChatMessages
 
 
 @dataclass
@@ -130,10 +130,12 @@ class PlanningWrapper(AbstractScalingAlgorithm):
     def infer(
         self,
         lm: AbstractLanguageModel,
-        prompt: str,
+        prompt_or_messages: str | list[ChatMessage] | ChatMessages,
         budget: int,
         return_response_only: bool = True,
     ) -> str | PlanningWrappedResult:
+        # Convert to uniform ChatMessages format
+        chat_messages = ChatMessages.from_prompt_or_messages(prompt_or_messages)
         """Run Planning-Enhanced version of the base algorithm.
 
         Args:
@@ -146,7 +148,8 @@ class PlanningWrapper(AbstractScalingAlgorithm):
             Best response string or full result object
         """
         # Step 1: Generate plan (uses 1 generation from budget)
-        planning_prompt = PlanningPromptTemplate.create_planning_prompt(prompt)
+        # TODO: Update PlanningPromptTemplate to support native ChatMessages format instead of string conversion
+        planning_prompt = PlanningPromptTemplate.create_planning_prompt(chat_messages.to_prompt())
         plan = lm.generate([ChatMessage(role="user", content=planning_prompt)])
 
         # Step 2: Parse approaches from plan
@@ -177,8 +180,9 @@ class PlanningWrapper(AbstractScalingAlgorithm):
             approach_budget = approach_budgets[approach]
 
             # Create approach-specific prompt
+            # TODO: Update ApproachPromptTemplate to support native ChatMessages format instead of string conversion
             approach_prompt = ApproachPromptTemplate.create_approach_prompt(
-                prompt, approach
+                chat_messages.to_prompt(), approach
             )
 
             # Run base algorithm for this approach
