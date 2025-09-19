@@ -237,7 +237,7 @@ class ChatCompletionChoice(BaseModel):
     """Single completion choice."""
 
     index: int = Field(..., description="Choice index")
-    message: ChatMessage = Field(..., description="Generated message")
+    message: dict = Field(..., description="Generated message in OpenAI format")
     finish_reason: str = Field(..., description="Reason for completion")
 
 
