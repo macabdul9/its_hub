@@ -31,7 +31,7 @@ class ChatMessage:
 
     role: Literal["system", "user", "assistant", "tool"]
     content: str | None
-    tool_calls: list[ToolCall] | None = None
+    tool_calls: list[dict] | None = None  # Store as plain dicts, not Pydantic objects
     tool_call_id: str | None = None
 
     def to_dict(self) -> dict:

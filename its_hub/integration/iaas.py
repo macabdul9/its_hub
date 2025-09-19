@@ -221,15 +221,9 @@ class ChatCompletionRequest(BaseModel):
     @field_validator("messages")
     @classmethod
     def validate_messages(cls, v):
-        """Validate message format and constraints."""
+        """Validate message format - flexible validation for various conversation formats."""
         if not v:
             raise ValueError("At least one message is required")
-        if len(v) > 2:
-            raise ValueError("Maximum 2 messages supported (optional system + user)")
-        if v[-1].role != "user":
-            raise ValueError("Last message must be from user")
-        if len(v) == 2 and v[0].role != "system":
-            raise ValueError("First message must be system when using 2 messages")
         return v
 
 
