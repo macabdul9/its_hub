@@ -130,26 +130,174 @@ class TestToolCallHandling:
         assert len(result.responses) == 3
 
 
-# TODO: Future work - implement tool call voting capability
-# These tests will need to be updated when tool call voting is implemented
-class TestFutureToolCallVoting:
-    """Placeholder tests for future tool call voting functionality."""
+class TestToolCallVotingBackwardCompatibility:
+    """Test that tool vote features maintain backward compatibility."""
     
-    @pytest.mark.skip(reason="Tool call voting not yet implemented")
-    def test_tool_call_consistency_voting(self):
-        """Test voting on tool calls themselves, not just content."""
-        # TODO: Implement tool call voting in SelfConsistency algorithm
-        # This should vote on the most common tool calls, not just content
-        pass
+    def test_existing_behavior_unchanged_without_tool_vote(self):
+        """Test that existing code without tool_vote parameter works unchanged."""
+        mock_lm = ToolCallMockLanguageModel()
+        
+        # Old way of initializing - should work exactly as before
+        def extract_number(text):
+            import re
+            numbers = re.findall(r'\d+', text)
+            return numbers[0] if numbers else ""
+        
+        sc = SelfConsistency(extract_number)  # No tool_vote parameter
+        result = sc.infer(mock_lm, "What is 6 * 7?", budget=4, return_response_only=False)
+        
+        # Should behave exactly as before - vote on content only
+        assert isinstance(result, SelfConsistencyResult)
+        assert result.the_one in ["I need to calculate this. The answer is 42.", "The answer is 42."]
+        assert all("42" in response for response in result.responses)
+
+
+class TestToolCallVoting:
+    """Test tool call voting functionality."""
     
-    @pytest.mark.skip(reason="Tool call voting not yet implemented") 
-    def test_mixed_tool_call_and_content_voting(self):
-        """Test voting that considers both tool calls and content."""
-        # TODO: Implement hybrid voting that considers both tool calls and content
-        pass
+    def test_tool_name_voting(self):
+        """Test voting on tool function names only."""
+        class ToolNameMock(SimpleMockLanguageModel):
+            def __init__(self):
+                super().__init__([])  # No predefined responses needed
+                
+            def generate(self, messages, **kwargs):
+                if isinstance(messages[0], list):
+                    return [
+                        {"role": "assistant", "content": "Calculating...", "tool_calls": [{"id": "1", "type": "function", "function": {"name": "calculate", "arguments": {"x": 1}}}]},
+                        {"role": "assistant", "content": "Computing...", "tool_calls": [{"id": "2", "type": "function", "function": {"name": "calculate", "arguments": {"x": 2}}}]},
+                        {"role": "assistant", "content": "Processing...", "tool_calls": [{"id": "3", "type": "function", "function": {"name": "search", "arguments": {"q": "test"}}}]},
+                        {"role": "assistant", "content": "Working...", "tool_calls": [{"id": "4", "type": "function", "function": {"name": "calculate", "arguments": {"x": 3}}}]}
+                    ]
+        
+        mock_lm = ToolNameMock()
+        sc = SelfConsistency(lambda x: x, tool_vote="tool_name")
+        result = sc.infer(mock_lm, "Test prompt", budget=4, return_response_only=False)
+        
+        # Should vote on tool names - "calculate" appears 3 times, "search" 1 time
+        # So "calculate" should win
+        assert isinstance(result, SelfConsistencyResult)
+        assert "calculate" in str(result.response_counts)
+        assert result.response_counts["calculate"] == 3
+        assert result.response_counts["search"] == 1
     
-    @pytest.mark.skip(reason="Tool call voting not yet implemented")
-    def test_tool_call_parameter_consistency(self):
-        """Test consistency voting on tool call parameters."""
-        # TODO: Implement voting on tool call parameters for consistency
-        pass
+    def test_tool_args_voting(self):
+        """Test voting on tool arguments only."""
+        class ToolArgsMock(SimpleMockLanguageModel):
+            def __init__(self):
+                super().__init__([])
+                
+            def generate(self, messages, **kwargs):
+                if isinstance(messages[0], list):
+                    return [
+                        {"role": "assistant", "content": "Test1", "tool_calls": [{"id": "1", "type": "function", "function": {"name": "func1", "arguments": {"x": 1, "y": 2}}}]},
+                        {"role": "assistant", "content": "Test2", "tool_calls": [{"id": "2", "type": "function", "function": {"name": "func2", "arguments": {"x": 1, "y": 2}}}]},
+                        {"role": "assistant", "content": "Test3", "tool_calls": [{"id": "3", "type": "function", "function": {"name": "func3", "arguments": {"a": 3, "b": 4}}}]},
+                        {"role": "assistant", "content": "Test4", "tool_calls": [{"id": "4", "type": "function", "function": {"name": "func4", "arguments": {"x": 1, "y": 2}}}]}
+                    ]
+        
+        mock_lm = ToolArgsMock()
+        sc = SelfConsistency(lambda x: x, tool_vote="tool_args")
+        result = sc.infer(mock_lm, "Test prompt", budget=4, return_response_only=False)
+        
+        # Should vote on arguments - (("x", 1), ("y", 2)) appears 3 times (converted to tuple)
+        expected_args = (("x", 1), ("y", 2))
+        assert result.response_counts[expected_args] == 3
+    
+    def test_tool_hierarchical_voting(self):
+        """Test hierarchical voting: tool name first, then arguments."""
+        class HierarchicalMock(SimpleMockLanguageModel):
+            def __init__(self):
+                super().__init__([])
+                
+            def generate(self, messages, **kwargs):
+                if isinstance(messages[0], list):
+                    return [
+                        {"role": "assistant", "content": "Test1", "tool_calls": [{"id": "1", "type": "function", "function": {"name": "calculate", "arguments": {"x": 1}}}]},
+                        {"role": "assistant", "content": "Test2", "tool_calls": [{"id": "2", "type": "function", "function": {"name": "calculate", "arguments": {"x": 2}}}]},
+                        {"role": "assistant", "content": "Test3", "tool_calls": [{"id": "3", "type": "function", "function": {"name": "search", "arguments": {"q": "test"}}}]},
+                        {"role": "assistant", "content": "Test4", "tool_calls": [{"id": "4", "type": "function", "function": {"name": "calculate", "arguments": {"x": 1}}}]}
+                    ]
+        
+        mock_lm = HierarchicalMock()
+        sc = SelfConsistency(lambda x: x, tool_vote="tool_hierarchical")
+        result = sc.infer(mock_lm, "Test prompt", budget=4, return_response_only=False)
+        
+        # Should vote hierarchically - ("calculate", (("x", 1),)) appears twice and should win
+        assert isinstance(result, SelfConsistencyResult)
+        expected_winner = ("calculate", (("x", 1),))
+        assert result.response_counts[expected_winner] == 2
+    
+    def test_exclude_args_functionality(self):
+        """Test excluding certain argument names from voting."""
+        class ExcludeArgsMock(SimpleMockLanguageModel):
+            def __init__(self):
+                super().__init__([])
+                
+            def generate(self, messages, **kwargs):
+                if isinstance(messages[0], list):
+                    return [
+                        {"role": "assistant", "content": "Test1", "tool_calls": [{"id": "1", "type": "function", "function": {"name": "func", "arguments": {"x": 1, "timestamp": "123", "id": "abc"}}}]},
+                        {"role": "assistant", "content": "Test2", "tool_calls": [{"id": "2", "type": "function", "function": {"name": "func", "arguments": {"x": 1, "timestamp": "456", "id": "def"}}}]}
+                    ]
+        
+        mock_lm = ExcludeArgsMock()
+        sc = SelfConsistency(lambda x: x, tool_vote="tool_args", exclude_args=["timestamp", "id"])
+        result = sc.infer(mock_lm, "Test prompt", budget=2, return_response_only=False)
+        
+        # After excluding timestamp and id, both should have (("x", 1),) and be considered identical
+        expected_args = (("x", 1),)
+        assert result.response_counts[expected_args] == 2
+    
+    def test_fallback_to_content_voting_when_no_tool_calls(self):
+        """Test that it falls back to content voting when responses have no tool calls."""
+        class NoToolCallsMock(SimpleMockLanguageModel):
+            def __init__(self):
+                super().__init__([])
+                
+            def generate(self, messages, **kwargs):
+                if isinstance(messages[0], list):
+                    return [
+                        {"role": "assistant", "content": "Answer: 42"},
+                        {"role": "assistant", "content": "Answer: 42"},
+                        {"role": "assistant", "content": "Answer: 24"}
+                    ]
+        
+        def extract_answer(text):
+            import re
+            match = re.search(r'Answer: (\d+)', text)
+            return match.group(1) if match else None
+        
+        mock_lm = NoToolCallsMock()
+        sc = SelfConsistency(extract_answer, tool_vote="tool_name")
+        result = sc.infer(mock_lm, "Test prompt", budget=3, return_response_only=False)
+        
+        # Should fall back to content voting since no tool calls
+        assert result.response_counts["42"] == 2
+        assert result.response_counts["24"] == 1
+        assert result.the_one == "Answer: 42"  # Returns full content, not extracted value
+    
+    def test_mixed_responses_with_and_without_tool_calls(self):
+        """Test behavior when some responses have tool calls and others don't."""
+        class MixedMock(SimpleMockLanguageModel):
+            def __init__(self):
+                super().__init__([])
+                
+            def generate(self, messages, **kwargs):
+                if isinstance(messages[0], list):
+                    return [
+                        {"role": "assistant", "content": "Using calculator", "tool_calls": [{"id": "1", "type": "function", "function": {"name": "calculate", "arguments": {"x": 1}}}]},
+                        {"role": "assistant", "content": "Direct answer: 42"},
+                        {"role": "assistant", "content": "Let me compute", "tool_calls": [{"id": "2", "type": "function", "function": {"name": "calculate", "arguments": {"x": 1}}}]}
+                    ]
+        
+        mock_lm = MixedMock()
+        sc = SelfConsistency(lambda x: x, tool_vote="tool_name")
+        result = sc.infer(mock_lm, "Test prompt", budget=3, return_response_only=False)
+        
+        # Should use tool voting since at least one response has tool calls
+        # Responses without tool calls get None for tool features
+        assert "calculate" in result.response_counts
+        assert None in result.response_counts  # For response without tool calls
+        assert result.response_counts["calculate"] == 2
+        assert result.response_counts[None] == 1
