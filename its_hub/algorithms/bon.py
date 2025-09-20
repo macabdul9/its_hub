@@ -12,12 +12,12 @@ from its_hub.utils import extract_content_from_lm_response
 
 @dataclass
 class BestOfNResult(AbstractScalingResult):
-    responses: list[str]
+    responses: list[dict]  # Keep original message format with tool calls
     scores: list[float]
     selected_index: int
 
     @property
-    def the_one(self) -> str:
+    def the_one(self) -> dict:
         return self.responses[self.selected_index]
 
 
@@ -31,12 +31,16 @@ class BestOfN(AbstractScalingAlgorithm):
         prompt_or_messages: str | list[ChatMessage] | ChatMessages,
         budget: int,
         return_response_only: bool = True,
-    ) -> str | BestOfNResult:
+        tools: list[dict] | None = None,
+        tool_choice: str | dict | None = None,
+    ) -> dict | BestOfNResult:
         # Convert to uniform ChatMessages format
         chat_messages = ChatMessages.from_prompt_or_messages(prompt_or_messages)
 
         # generate responses
-        responses = lm.generate(chat_messages.to_batch(budget))
+        responses = lm.generate(
+            chat_messages.to_batch(budget), tools=tools, tool_choice=tool_choice
+        )
 
         # extract content from message dict responses
         response_contents = [extract_content_from_lm_response(r) for r in responses]
@@ -52,13 +56,12 @@ class BestOfN(AbstractScalingAlgorithm):
             for r in response_contents:
                 scores.append(self.orm.score(chat_messages, r))
 
-
         # select the best response
         selected_index = scores.index(max(scores))
 
-        # return the result
+        # return the result - preserve original message format with tool calls
         result = BestOfNResult(
-            responses=response_contents,
+            responses=responses,  # Keep original dict format with tool calls
             scores=scores,
             selected_index=selected_index,
         )

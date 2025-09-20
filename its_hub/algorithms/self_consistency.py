@@ -15,12 +15,12 @@ from its_hub.types import ChatMessage, ChatMessages
 
 @dataclass
 class SelfConsistencyResult(AbstractScalingResult):
-    responses: list[str]
-    response_counts: Counter[str] | Counter[tuple]
+    responses: list[dict]  # Keep original message format with tool calls
+    response_counts: Counter[str] | Counter[tuple] | Counter
     selected_index: int
 
     @property
-    def the_one(self) -> str:
+    def the_one(self) -> dict:
         return self.responses[self.selected_index]
 
 
@@ -107,8 +107,43 @@ def _select_hierarchical_most_common_or_random(
 
 
 class SelfConsistency(AbstractScalingAlgorithm):
-    def __init__(self, consistency_space_projection_func: Callable):
+    def __init__(
+        self,
+        consistency_space_projection_func: Callable,
+        tool_vote: str | None = None,
+        exclude_args: list[str] | None = None,
+    ):
+        """Initialize SelfConsistency algorithm with optional tool-vote capability.
+
+        Args:
+            consistency_space_projection_func: Function that maps response content (str)
+                to a comparable value for voting. Used when tool_vote is None or when
+                responses don't contain tool calls. Can return str, tuple, or any hashable type.
+
+            tool_vote: Tool voting strategy when responses contain tool calls. Options:
+                - None (default): Vote on message content using consistency_space_projection_func
+                - "tool_name": Vote on tool function names only
+                - "tool_args": Vote on tool function arguments only (as dicts)
+                - "tool_hierarchical": Vote on tool name first, then arguments (hierarchical)
+                When tool calls exist and tool_vote is set, this takes priority over content voting.
+
+            exclude_args: List of argument names to exclude from tool voting when
+                tool_vote is "tool_args" or "tool_hierarchical". Useful for filtering out
+                non-semantic arguments like timestamps, request IDs, etc.
+
+        Raises:
+            ValueError: If tool_vote is not one of the supported options.
+        """
+        # Validate tool_vote parameter - only validation needed since typing handles the rest
+        valid_tool_vote_options = {None, "tool_name", "tool_args", "tool_hierarchical"}
+        if tool_vote not in valid_tool_vote_options:
+            raise ValueError(
+                f"tool_vote must be one of {valid_tool_vote_options}, got: {tool_vote}"
+            )
+
         self.consistency_space_projection_func = consistency_space_projection_func
+        self.tool_vote = tool_vote
+        self.exclude_args = exclude_args or []
 
     def infer(
         self,
@@ -116,22 +151,31 @@ class SelfConsistency(AbstractScalingAlgorithm):
         prompt_or_messages: str | list[ChatMessage] | ChatMessages,
         budget: int,
         return_response_only: bool = True,
-    ) -> str | SelfConsistencyResult:
+        tools: list[dict] | None = None,
+        tool_choice: str | dict | None = None,
+    ) -> dict | SelfConsistencyResult:
         # Convert to uniform ChatMessages format
         chat_messages = ChatMessages.from_prompt_or_messages(prompt_or_messages)
 
         # generate responses
-        responses = lm.generate(chat_messages.to_batch(budget))
+        responses = lm.generate(
+            chat_messages.to_batch(budget), tools=tools, tool_choice=tool_choice
+        )
 
-        # extract content from message dict responses for projection
-        # TODO: Add tool-vote capability to handle tool calls in consistency voting
-        # For now, only vote on message content, ignoring tool calls
-        response_contents = [r.get("content", "") for r in responses]
+        # Check if we should use tool-vote or content-vote
+        has_tool_calls = any(r.get("tool_calls") for r in responses)
 
-        # project responses into consistency space
-        responses_projected = [
-            self.consistency_space_projection_func(r) for r in response_contents
-        ]
+        if has_tool_calls and self.tool_vote:
+            # Vote on tool calls directly
+            responses_projected = [
+                self._extract_tool_call_features(r) for r in responses
+            ]
+        else:
+            # Vote on message content (existing behavior)
+            response_contents = [r.get("content", "") for r in responses]
+            responses_projected = [
+                self.consistency_space_projection_func(r) for r in response_contents
+            ]
 
         # determine if we're dealing with hierarchical (tuple) or flat (string) projections
         if responses_projected and isinstance(responses_projected[0], tuple):
@@ -145,13 +189,67 @@ class SelfConsistency(AbstractScalingAlgorithm):
                 responses_projected
             )
 
-        # return the result
+        # return the result - preserve original message format with tool calls
         result = SelfConsistencyResult(
-            responses=response_contents,
+            responses=responses,  # Keep original dict format with tool calls
             response_counts=response_counts,
             selected_index=selected_index,
         )
         return result.the_one if return_response_only else result
+
+    def _extract_tool_call_features(self, message_obj: dict):
+        """Extract tool call features for voting based on tool_vote type."""
+        tool_calls = message_obj.get("tool_calls", [])
+        if not tool_calls:
+            return None if self.tool_vote == "tool_name" else (None, None)
+
+        first_tc = tool_calls[0]
+        function_name = first_tc.get("function", {}).get("name")
+        function_args = first_tc.get("function", {}).get("arguments", {})
+
+        # Handle case where arguments might be a JSON string instead of dict
+        if isinstance(function_args, str):
+            try:
+                import json
+
+                function_args = json.loads(function_args)
+            except (json.JSONDecodeError, TypeError):
+                # If parsing fails, treat as empty dict
+                function_args = {}
+
+        # Ensure function_args is a dict
+        if not isinstance(function_args, dict):
+            function_args = {}
+
+        # Filter arguments if specified
+        if self.exclude_args:
+            function_args = {
+                k: v for k, v in function_args.items() if k not in self.exclude_args
+            }
+
+        # Convert dict to hashable tuple for Counter compatibility
+        # handles nested structures
+        def make_hashable(obj):
+            """Recursively convert nested structures to hashable types."""
+            if isinstance(obj, dict):
+                return tuple(sorted((k, make_hashable(v)) for k, v in obj.items()))
+            elif isinstance(obj, list):
+                return tuple(make_hashable(item) for item in obj)
+            elif isinstance(obj, set):
+                return tuple(sorted(make_hashable(item) for item in obj))
+            else:
+                return obj
+
+        args_tuple = make_hashable(function_args) if function_args else ()
+
+        if self.tool_vote == "tool_name":
+            return function_name
+        elif self.tool_vote == "tool_args":
+            return args_tuple  # Use tuple instead of dict
+        elif self.tool_vote == "tool_hierarchical":
+            return (function_name, args_tuple)  # Use tuple instead of dict
+        else:
+            raise ValueError(f"Unknown tool_vote type: {self.tool_vote}")
 
 
 def create_regex_projection_function(

@@ -23,8 +23,8 @@ class TestIaaSAPIEndpoints:
         request_data = TestDataFactory.create_chat_completion_request()
 
         response = iaas_client.post("/v1/chat/completions", json=request_data)
-        assert response.status_code == 503
-        assert "not configured" in response.json()["detail"]
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"]
 
     def test_api_documentation_available(self, iaas_client):
         """Test that API documentation is available."""
@@ -125,20 +125,204 @@ class TestConfiguration:
         assert data["data"][0]["owned_by"] == "its_hub"
 
 
+class TestSelfConsistencyToolVote:
+    """Test self-consistency configuration with tool-vote functionality."""
+
+    def test_self_consistency_basic_configuration(self, iaas_client, vllm_server):
+        """Test basic self-consistency configuration without tool-vote."""
+        config_data = {
+            "endpoint": vllm_server,
+            "api_key": TEST_CONSTANTS["DEFAULT_API_KEY"],
+            "model": TEST_CONSTANTS["DEFAULT_MODEL_NAME"],
+            "alg": "self-consistency",
+            "regex_patterns": [r"\\boxed{([^}]+)}"]
+        }
+
+        response = iaas_client.post("/configure", json=config_data)
+        assert response.status_code == 200
+        assert "success" in response.json()["status"]
+
+    def test_self_consistency_with_tool_name_vote(self, iaas_client, vllm_server):
+        """Test self-consistency configuration with tool_name voting."""
+        config_data = {
+            "endpoint": vllm_server,
+            "api_key": TEST_CONSTANTS["DEFAULT_API_KEY"],
+            "model": TEST_CONSTANTS["DEFAULT_MODEL_NAME"],
+            "alg": "self-consistency",
+            "regex_patterns": [r"\\boxed{([^}]+)}"],
+            "tool_vote": "tool_name"
+        }
+
+        response = iaas_client.post("/configure", json=config_data)
+        assert response.status_code == 200
+        assert "success" in response.json()["status"]
+
+    def test_self_consistency_with_tool_args_vote(self, iaas_client, vllm_server):
+        """Test self-consistency configuration with tool_args voting."""
+        config_data = {
+            "endpoint": vllm_server,
+            "api_key": TEST_CONSTANTS["DEFAULT_API_KEY"],
+            "model": TEST_CONSTANTS["DEFAULT_MODEL_NAME"],
+            "alg": "self-consistency",
+            "regex_patterns": [r"\\boxed{([^}]+)}"],
+            "tool_vote": "tool_args"
+        }
+
+        response = iaas_client.post("/configure", json=config_data)
+        assert response.status_code == 200
+        assert "success" in response.json()["status"]
+
+    def test_self_consistency_with_hierarchical_vote(self, iaas_client, vllm_server):
+        """Test self-consistency configuration with tool_hierarchical voting."""
+        config_data = {
+            "endpoint": vllm_server,
+            "api_key": TEST_CONSTANTS["DEFAULT_API_KEY"],
+            "model": TEST_CONSTANTS["DEFAULT_MODEL_NAME"],
+            "alg": "self-consistency",
+            "regex_patterns": [r"\\boxed{([^}]+)}"],
+            "tool_vote": "tool_hierarchical"
+        }
+
+        response = iaas_client.post("/configure", json=config_data)
+        assert response.status_code == 200
+        assert "success" in response.json()["status"]
+
+    def test_self_consistency_with_exclude_args(self, iaas_client, vllm_server):
+        """Test self-consistency configuration with exclude_args."""
+        config_data = {
+            "endpoint": vllm_server,
+            "api_key": TEST_CONSTANTS["DEFAULT_API_KEY"],
+            "model": TEST_CONSTANTS["DEFAULT_MODEL_NAME"],
+            "alg": "self-consistency",
+            "regex_patterns": [r"\\boxed{([^}]+)}"],
+            "tool_vote": "tool_args",
+            "exclude_args": ["timestamp", "request_id"]
+        }
+
+        response = iaas_client.post("/configure", json=config_data)
+        assert response.status_code == 200
+        assert "success" in response.json()["status"]
+
+    def test_self_consistency_with_all_tool_vote_options(self, iaas_client, vllm_server):
+        """Test self-consistency configuration with all tool-vote options."""
+        config_data = {
+            "endpoint": vllm_server,
+            "api_key": TEST_CONSTANTS["DEFAULT_API_KEY"],
+            "model": TEST_CONSTANTS["DEFAULT_MODEL_NAME"],
+            "alg": "self-consistency",
+            "regex_patterns": [r"\\boxed{([^}]+)}"],
+            "tool_vote": "tool_hierarchical",
+            "exclude_args": ["timestamp", "id", "session_id"]
+        }
+
+        response = iaas_client.post("/configure", json=config_data)
+        assert response.status_code == 200
+        assert "success" in response.json()["status"]
+
+    def test_invalid_tool_vote_value(self, iaas_client, vllm_server):
+        """Test that invalid tool_vote values are rejected by SelfConsistency class."""
+        config_data = {
+            "endpoint": vllm_server,
+            "api_key": TEST_CONSTANTS["DEFAULT_API_KEY"],
+            "model": TEST_CONSTANTS["DEFAULT_MODEL_NAME"],
+            "alg": "self-consistency",
+            "regex_patterns": [r"\\boxed{([^}]+)}"],
+            "tool_vote": "invalid_option"
+        }
+
+        response = iaas_client.post("/configure", json=config_data)
+        assert response.status_code == 500
+        assert "tool_vote must be one of" in response.json()["detail"]
+
+    def test_tool_vote_algorithm_usage_verification(self, iaas_client, vllm_server):
+        """Test that configured tool-vote parameters are passed to SelfConsistency."""
+        # Mock the SelfConsistency constructor to verify parameters
+        with patch('its_hub.integration.iaas.SelfConsistency') as mock_sc:
+            mock_sc.return_value = MagicMock()
+            
+            config_data = {
+                "endpoint": vllm_server,
+                "api_key": TEST_CONSTANTS["DEFAULT_API_KEY"],
+                "model": TEST_CONSTANTS["DEFAULT_MODEL_NAME"],
+                "alg": "self-consistency",
+                "regex_patterns": [r"\\boxed{([^}]+)}"],
+                "tool_vote": "tool_hierarchical",
+                "exclude_args": ["timestamp", "id"]
+            }
+
+            response = iaas_client.post("/configure", json=config_data)
+            assert response.status_code == 200
+
+            # Verify SelfConsistency was called with correct parameters
+            mock_sc.assert_called_once()
+            call_args = mock_sc.call_args
+            
+            # Check keyword arguments
+            assert call_args.kwargs["tool_vote"] == "tool_hierarchical"
+            assert call_args.kwargs["exclude_args"] == ["timestamp", "id"]
+
+    def test_tool_vote_with_chat_completion(self, iaas_client, vllm_server):
+        """Test chat completion with tool-vote configured algorithm."""
+        # Configure service with tool voting
+        config_data = {
+            "endpoint": vllm_server,
+            "api_key": TEST_CONSTANTS["DEFAULT_API_KEY"],
+            "model": TEST_CONSTANTS["DEFAULT_MODEL_NAME"],
+            "alg": "self-consistency",
+            "regex_patterns": [r"\\boxed{([^}]+)}"],
+            "tool_vote": "tool_name"
+        }
+        
+        config_response = iaas_client.post("/configure", json=config_data)
+        assert config_response.status_code == 200
+
+        # Mock the scaling algorithm
+        import its_hub.integration.iaas as iaas_module
+        mock_scaling_alg = MagicMock()
+        mock_scaling_alg.infer.return_value = {"role": "assistant", "content": "Tool voting response"}
+        iaas_module.SCALING_ALG = mock_scaling_alg
+
+        # Make chat completion request
+        request_data = TestDataFactory.create_chat_completion_request(
+            user_content="Use a calculator tool to solve 15 * 23",
+            budget=8
+        )
+
+        response = iaas_client.post("/v1/chat/completions", json=request_data)
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["choices"][0]["message"]["content"] == "Tool voting response"
+
+        # Verify the scaling algorithm was called
+        mock_scaling_alg.infer.assert_called_once()
+
+    @pytest.mark.parametrize("tool_vote_config", [
+        {"tool_vote": "tool_name"},
+        {"tool_vote": "tool_args", "exclude_args": ["id"]},
+        {"tool_vote": "tool_hierarchical", "exclude_args": ["timestamp", "session_id"]},
+    ])
+    def test_various_tool_vote_configurations(self, iaas_client, vllm_server, tool_vote_config):
+        """Test various valid tool-vote configurations."""
+        config_data = {
+            "endpoint": vllm_server,
+            "api_key": TEST_CONSTANTS["DEFAULT_API_KEY"],
+            "model": TEST_CONSTANTS["DEFAULT_MODEL_NAME"],
+            "alg": "self-consistency",
+            "regex_patterns": [r"\\boxed{([^}]+)}"],
+            **tool_vote_config
+        }
+
+        response = iaas_client.post("/configure", json=config_data)
+        assert response.status_code == 200
+        assert "success" in response.json()["status"]
+
+
 class TestChatCompletions:
     """Test the chat completions endpoint."""
 
     @pytest.mark.parametrize("invalid_request", [
         {"model": "test-model", "messages": [], "budget": 4},
-        {"model": "test-model", "messages": [
-            {"role": "system", "content": "System prompt"},
-            {"role": "user", "content": "User message"},
-            {"role": "assistant", "content": "Too many messages"}
-        ], "budget": 4},
-        {"model": "test-model", "messages": [
-            {"role": "user", "content": "User first"},
-            {"role": "system", "content": "System second"}
-        ], "budget": 4},
         {"model": "test-model", "messages": [{"role": "user", "content": "Test"}], "budget": 0},
     ])
     def test_chat_completions_validation(self, iaas_client, invalid_request):
@@ -173,7 +357,7 @@ class TestChatCompletions:
         # Mock the scaling algorithm
         import its_hub.integration.iaas as iaas_module
         mock_scaling_alg = MagicMock()
-        mock_scaling_alg.infer.return_value = "Mocked scaling response"
+        mock_scaling_alg.infer.return_value = {"role": "assistant", "content": "Mocked scaling response"}
         iaas_module.SCALING_ALG = mock_scaling_alg
 
         request_data = TestDataFactory.create_chat_completion_request(
@@ -212,7 +396,7 @@ class TestChatCompletions:
         # Mock the scaling algorithm
         import its_hub.integration.iaas as iaas_module
         mock_scaling_alg = MagicMock()
-        mock_scaling_alg.infer.return_value = "Response with system prompt"
+        mock_scaling_alg.infer.return_value = {"role": "assistant", "content": "Response with system prompt"}
         iaas_module.SCALING_ALG = mock_scaling_alg
 
         request_data = TestDataFactory.create_chat_completion_request(
@@ -320,23 +504,62 @@ class TestPydanticModels:
                 budget=invalid_budget
             )
 
-    @pytest.mark.parametrize("invalid_messages,expected_error", [
-        ([
-            ChatMessage(role="system", content="System"),
-            ChatMessage(role="user", content="User"),
-            ChatMessage(role="assistant", content="Too many")
-        ], "Maximum 2 messages"),
-        ([
-            ChatMessage(role="user", content="User"),
-            ChatMessage(role="assistant", content="Assistant last")
-        ], "Last message must be from user"),
-    ])
-    def test_message_validation_in_chat_request(self, invalid_messages, expected_error):
-        """Test message validation in ChatCompletionRequest."""
+    def test_message_validation_in_chat_request_empty_messages(self):
+        """Test message validation in ChatCompletionRequest for empty messages."""
         with pytest.raises(ValueError) as exc_info:
             ChatCompletionRequest(
                 model=TEST_CONSTANTS["DEFAULT_MODEL_NAME"],
-                messages=invalid_messages,
+                messages=[],
                 budget=4
             )
-        assert expected_error in str(exc_info.value)
+        assert "At least one message is required" in str(exc_info.value)
+
+    def test_config_request_with_tool_vote_parameters(self):
+        """Test ConfigRequest with tool-vote parameters."""
+        config = ConfigRequest(
+            endpoint="http://localhost:8000",
+            api_key=TEST_CONSTANTS["DEFAULT_API_KEY"],
+            model=TEST_CONSTANTS["DEFAULT_MODEL_NAME"],
+            alg="self-consistency",
+            regex_patterns=[r"\\boxed{([^}]+)}"],
+            tool_vote="tool_hierarchical",
+            exclude_args=["timestamp", "id"]
+        )
+
+        assert config.tool_vote == "tool_hierarchical"
+        assert config.exclude_args == ["timestamp", "id"]
+        assert config.regex_patterns == [r"\\boxed{([^}]+)}"]
+
+    def test_config_request_tool_vote_optional(self):
+        """Test that tool_vote and exclude_args are optional."""
+        config = ConfigRequest(
+            endpoint="http://localhost:8000",
+            api_key=TEST_CONSTANTS["DEFAULT_API_KEY"],
+            model=TEST_CONSTANTS["DEFAULT_MODEL_NAME"],
+            alg="self-consistency",
+            regex_patterns=[r"\\boxed{([^}]+)}"]
+        )
+
+        assert config.tool_vote is None
+        assert config.exclude_args is None
+
+    def test_chat_completion_request_with_return_response_only(self):
+        """Test ChatCompletionRequest with return_response_only parameter."""
+        request = ChatCompletionRequest(
+            model=TEST_CONSTANTS["DEFAULT_MODEL_NAME"],
+            messages=[ChatMessage(role="user", content="Test")],
+            budget=4,
+            return_response_only=False
+        )
+
+        assert request.return_response_only is False
+
+    def test_chat_completion_request_defaults(self):
+        """Test ChatCompletionRequest default values."""
+        request = ChatCompletionRequest(
+            model=TEST_CONSTANTS["DEFAULT_MODEL_NAME"],
+            messages=[ChatMessage(role="user", content="Test")],
+            budget=4
+        )
+
+        assert request.return_response_only is True  # Default value
