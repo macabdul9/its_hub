@@ -324,9 +324,11 @@ class ParticleFiltering(ParticleGibbs):
         prompt_or_messages: str | list[ChatMessage] | ChatMessages,
         budget: int,
         return_response_only: bool = True,
+        tools: list[dict] | None = None,
+        tool_choice: str | dict | None = None,
     ) -> dict | ParticleFilteringResult:
         result = super().infer(
-            lm, prompt_or_messages, budget, return_response_only=False
+            lm, prompt_or_messages, budget, return_response_only=False, tools=tools, tool_choice=tool_choice
         )
 
         # Flatten the single-iteration result
