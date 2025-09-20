@@ -123,7 +123,9 @@ class ParticleGibbs(AbstractScalingAlgorithm):
                 if p.is_stopped:
                     continue
 
-                next_step, is_stopped = self.sg.forward(lm, prompt, p.steps, tools=tools, tool_choice=tool_choice)
+                next_step, is_stopped = self.sg.forward(
+                    lm, prompt, p.steps, tools=tools, tool_choice=tool_choice
+                )
                 p.steps.append(next_step)
                 p.is_stopped = is_stopped
                 score = self.prm.score(
@@ -145,7 +147,9 @@ class ParticleGibbs(AbstractScalingAlgorithm):
             steps_so_far.append(p.steps)
 
         # collect batch outputs
-        sg_forward_results = self.sg.forward(lm, prompts, steps_so_far, tools=tools, tool_choice=tool_choice)
+        sg_forward_results = self.sg.forward(
+            lm, prompts, steps_so_far, tools=tools, tool_choice=tool_choice
+        )
 
         # update particles
         i = 0
@@ -222,7 +226,12 @@ class ParticleGibbs(AbstractScalingAlgorithm):
             while not all(p.is_stopped for p in particles):
                 # TODO: Update _propagate to support native ChatMessages format instead of string conversion
                 particles = self._propagate(
-                    lm, particles, chat_messages.to_prompt(), batched=True, tools=tools, tool_choice=tool_choice
+                    lm,
+                    particles,
+                    chat_messages.to_prompt(),
+                    batched=True,
+                    tools=tools,
+                    tool_choice=tool_choice,
                 )
 
                 current_step += 1  # Increment after propagation
@@ -270,7 +279,13 @@ class ParticleGibbs(AbstractScalingAlgorithm):
             ref_particles = [particles[i] for i in ref_indices]
 
             responses_lst.append(
-                [{"role": "assistant", "content": self.sg._post_process(p.steps, stopped=True)} for p in particles]
+                [
+                    {
+                        "role": "assistant",
+                        "content": self.sg._post_process(p.steps, stopped=True),
+                    }
+                    for p in particles
+                ]
             )
             log_weights_lst.append(log_weights)
             ref_indices_lst.append(ref_indices)
@@ -328,7 +343,12 @@ class ParticleFiltering(ParticleGibbs):
         tool_choice: str | dict | None = None,
     ) -> dict | ParticleFilteringResult:
         result = super().infer(
-            lm, prompt_or_messages, budget, return_response_only=False, tools=tools, tool_choice=tool_choice
+            lm,
+            prompt_or_messages,
+            budget,
+            return_response_only=False,
+            tools=tools,
+            tool_choice=tool_choice,
         )
 
         # Flatten the single-iteration result

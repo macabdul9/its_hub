@@ -38,7 +38,9 @@ class BestOfN(AbstractScalingAlgorithm):
         chat_messages = ChatMessages.from_prompt_or_messages(prompt_or_messages)
 
         # generate responses
-        responses = lm.generate(chat_messages.to_batch(budget), tools=tools, tool_choice=tool_choice)
+        responses = lm.generate(
+            chat_messages.to_batch(budget), tools=tools, tool_choice=tool_choice
+        )
 
         # extract content from message dict responses
         response_contents = [extract_content_from_lm_response(r) for r in responses]

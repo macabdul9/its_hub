@@ -59,12 +59,12 @@ class ConfigRequest(BaseModel):
         None, description="Regex patterns for self-consistency projection function"
     )
     tool_vote: str | None = Field(
-        None, 
-        description="Tool voting strategy: 'tool_name', 'tool_args', 'tool_hierarchical'"
+        None,
+        description="Tool voting strategy: 'tool_name', 'tool_args', 'tool_hierarchical'",
     )
     exclude_args: list[str] | None = Field(
         None,
-        description="Argument names to exclude from tool voting (e.g., timestamp, id)"
+        description="Argument names to exclude from tool voting (e.g., timestamp, id)",
     )
 
     @field_validator("alg")
@@ -96,7 +96,6 @@ class ConfigRequest(BaseModel):
         if alg in {"particle-filtering", "best-of-n"} and not v:
             raise ValueError(f"rm_name is required when using {alg} algorithm")
         return v
-
 
 
 @app.post("/configure", status_code=status.HTTP_200_OK)
@@ -165,7 +164,7 @@ async def config_service(request: ConfigRequest) -> dict[str, str]:
             SCALING_ALG = SelfConsistency(
                 projection_func,
                 tool_vote=request.tool_vote,
-                exclude_args=request.exclude_args
+                exclude_args=request.exclude_args,
             )
 
         logger.info(f"Successfully configured {request.alg} algorithm")
@@ -280,7 +279,9 @@ class ChatCompletionResponse(BaseModel):
     model: str = Field(..., description="Model used")
     choices: list[ChatCompletionChoice] = Field(..., description="Generated choices")
     usage: ChatCompletionUsage = Field(..., description="Token usage statistics")
-    metadata: dict[str, Any] | None = Field(None, description="Algorithm-specific metadata")
+    metadata: dict[str, Any] | None = Field(
+        None, description="Algorithm-specific metadata"
+    )
 
 
 @app.post("/v1/chat/completions", response_model=ChatCompletionResponse)
@@ -321,12 +322,17 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletionResp
         )
 
         # Generate response using scaling algorithm with full conversation context
-        algorithm_result = SCALING_ALG.infer(lm, chat_messages, request.budget, 
-                                           return_response_only=request.return_response_only,
-                                           tools=request.tools, tool_choice=request.tool_choice)
-        
+        algorithm_result = SCALING_ALG.infer(
+            lm,
+            chat_messages,
+            request.budget,
+            return_response_only=request.return_response_only,
+            tools=request.tools,
+            tool_choice=request.tool_choice,
+        )
+
         # Extract response content and metadata
-        if not request.return_response_only and hasattr(algorithm_result, 'the_one'):
+        if not request.return_response_only and hasattr(algorithm_result, "the_one"):
             # Got a full result object
             response_message = algorithm_result.the_one
             metadata = _extract_algorithm_metadata(algorithm_result)

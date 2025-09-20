@@ -193,7 +193,12 @@ class PlanningWrapper(AbstractScalingAlgorithm):
 
             # Run base algorithm for this approach
             approach_result = self.base_algorithm.infer(
-                lm, approach_prompt, approach_budget, return_response_only=False, tools=tools, tool_choice=tool_choice
+                lm,
+                approach_prompt,
+                approach_budget,
+                return_response_only=False,
+                tools=tools,
+                tool_choice=tool_choice,
             )
 
             # Store approach-specific result

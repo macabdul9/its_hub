@@ -65,7 +65,9 @@ class BeamSearch(AbstractScalingAlgorithm):
                 if c.is_stopped:
                     continue
 
-                next_step, is_stopped = self.sg.forward(lm, prompt, c.steps, tools=tools, tool_choice=tool_choice)
+                next_step, is_stopped = self.sg.forward(
+                    lm, prompt, c.steps, tools=tools, tool_choice=tool_choice
+                )
                 c.steps.append(next_step)
                 c.is_stopped = is_stopped
                 score = self.prm.score(
@@ -87,7 +89,9 @@ class BeamSearch(AbstractScalingAlgorithm):
             steps_so_far.append(c.steps)
 
         # collect batch outputs
-        sg_forward_results = self.sg.forward(lm, prompts, steps_so_far, tools=tools, tool_choice=tool_choice)
+        sg_forward_results = self.sg.forward(
+            lm, prompts, steps_so_far, tools=tools, tool_choice=tool_choice
+        )
 
         # update candidates
         i = 0
@@ -153,7 +157,12 @@ class BeamSearch(AbstractScalingAlgorithm):
         while not all(c.is_stopped for c in candidates):
             # TODO: Update _search_one_level to support native ChatMessages format instead of string conversion
             candidates = self._search_one_level(
-                lm, candidates, chat_messages.to_prompt(), batched=True, tools=tools, tool_choice=tool_choice
+                lm,
+                candidates,
+                chat_messages.to_prompt(),
+                batched=True,
+                tools=tools,
+                tool_choice=tool_choice,
             )
 
             # get the top beam_width candidates
@@ -171,7 +180,11 @@ class BeamSearch(AbstractScalingAlgorithm):
         steps_used = [len(c.steps) for c in candidates]
         result = BeamSearchResult(
             responses=[
-                {"role": "assistant", "content": self.sg._post_process(c.steps, stopped=True)} for c in candidates
+                {
+                    "role": "assistant",
+                    "content": self.sg._post_process(c.steps, stopped=True),
+                }
+                for c in candidates
             ],
             scores=scores,
             selected_index=int(np.argmax(scores)),

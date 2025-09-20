@@ -158,7 +158,9 @@ class SelfConsistency(AbstractScalingAlgorithm):
         chat_messages = ChatMessages.from_prompt_or_messages(prompt_or_messages)
 
         # generate responses
-        responses = lm.generate(chat_messages.to_batch(budget), tools=tools, tool_choice=tool_choice)
+        responses = lm.generate(
+            chat_messages.to_batch(budget), tools=tools, tool_choice=tool_choice
+        )
 
         # Check if we should use tool-vote or content-vote
         has_tool_calls = any(r.get("tool_calls") for r in responses)
@@ -209,11 +211,12 @@ class SelfConsistency(AbstractScalingAlgorithm):
         if isinstance(function_args, str):
             try:
                 import json
+
                 function_args = json.loads(function_args)
             except (json.JSONDecodeError, TypeError):
                 # If parsing fails, treat as empty dict
                 function_args = {}
-        
+
         # Ensure function_args is a dict
         if not isinstance(function_args, dict):
             function_args = {}
@@ -236,7 +239,7 @@ class SelfConsistency(AbstractScalingAlgorithm):
                 return tuple(sorted(make_hashable(item) for item in obj))
             else:
                 return obj
-        
+
         args_tuple = make_hashable(function_args) if function_args else ()
 
         if self.tool_vote == "tool_name":
