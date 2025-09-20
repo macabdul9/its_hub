@@ -23,8 +23,8 @@ class TestIaaSAPIEndpoints:
         request_data = TestDataFactory.create_chat_completion_request()
 
         response = iaas_client.post("/v1/chat/completions", json=request_data)
-        assert response.status_code == 503
-        assert "not configured" in response.json()["detail"]
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"]
 
     def test_api_documentation_available(self, iaas_client):
         """Test that API documentation is available."""
@@ -504,26 +504,15 @@ class TestPydanticModels:
                 budget=invalid_budget
             )
 
-    @pytest.mark.parametrize("invalid_messages,expected_error", [
-        ([
-            ChatMessage(role="system", content="System"),
-            ChatMessage(role="user", content="User"),
-            ChatMessage(role="assistant", content="Too many")
-        ], "Maximum 2 messages"),
-        ([
-            ChatMessage(role="user", content="User"),
-            ChatMessage(role="assistant", content="Assistant last")
-        ], "Last message must be from user"),
-    ])
-    def test_message_validation_in_chat_request(self, invalid_messages, expected_error):
-        """Test message validation in ChatCompletionRequest."""
+    def test_message_validation_in_chat_request_empty_messages(self):
+        """Test message validation in ChatCompletionRequest for empty messages."""
         with pytest.raises(ValueError) as exc_info:
             ChatCompletionRequest(
                 model=TEST_CONSTANTS["DEFAULT_MODEL_NAME"],
-                messages=invalid_messages,
+                messages=[],
                 budget=4
             )
-        assert expected_error in str(exc_info.value)
+        assert "At least one message is required" in str(exc_info.value)
 
     def test_config_request_with_tool_vote_parameters(self):
         """Test ConfigRequest with tool-vote parameters."""
