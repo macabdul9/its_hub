@@ -4,6 +4,7 @@ import ssl
 
 import aiohttp
 import backoff
+import certifi
 import requests
 
 from .base import AbstractLanguageModel
@@ -250,8 +251,9 @@ class OpenAICompatibleLanguageModel(AbstractLanguageModel):
             self.ssl_context.check_hostname = False
             self.ssl_context.verify_mode = ssl.CERT_NONE
         else:
-            # Use default SSL context with verification
-            self.ssl_context = None
+            # For async requests, create SSL context using the same CA bundle as requests
+            # This ensures aiohttp uses the same certificates as requests library
+            self.ssl_context = ssl.create_default_context(cafile=certifi.where())
 
         # set up headers for API requests
         self.headers = {
@@ -355,7 +357,8 @@ class OpenAICompatibleLanguageModel(AbstractLanguageModel):
         )
 
         # create a single session for all requests in this call
-        connector = aiohttp.TCPConnector(ssl=self.ssl_context) if self.ssl_context else None
+        # Use the same SSL behavior as requests library
+        connector = aiohttp.TCPConnector(ssl=self.ssl_context)
         async with aiohttp.ClientSession(connector=connector) as session:
 
             @backoff.on_exception(

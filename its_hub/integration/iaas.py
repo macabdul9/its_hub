@@ -126,7 +126,7 @@ async def config_service(request: ConfigRequest) -> dict[str, str]:
             api_key=request.api_key,
             model_name=request.model,
             is_async=True,  # Enable async mode for better performance
-            verify_ssl=False,  # Disable SSL verification to avoid certificate issues
+            # SSL verification enabled by default (same as synchronous requests)
         )
         LM_DICT[request.model] = lm
 
