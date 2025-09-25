@@ -18,7 +18,7 @@ from its_hub.algorithms.self_consistency import (
     SelfConsistency,
     create_regex_projection_function,
 )
-from its_hub.lms import OpenAICompatibleLanguageModel, StepGeneration
+from its_hub.lms import OpenAICompatibleLanguageModel, LiteLLMLanguageModel, StepGeneration
 from its_hub.types import ChatMessage, ChatMessages
 
 # Configure logging
@@ -33,7 +33,7 @@ app = FastAPI(
 )
 
 # Global state - TODO: Replace with proper dependency injection in production
-LM_DICT: dict[str, OpenAICompatibleLanguageModel] = {}
+LM_DICT: dict[str, OpenAICompatibleLanguageModel | LiteLLMLanguageModel] = {}
 SCALING_ALG: Any | None = None  # TODO: Add proper type annotation
 
 
@@ -44,6 +44,7 @@ class ConfigRequest(BaseModel):
     api_key: str = Field(..., description="API key for the language model")
     model: str = Field(..., description="Model name identifier")
     alg: str = Field(..., description="Scaling algorithm to use")
+    provider: str = Field("openai", description="LM provider: 'openai' or 'litellm'")
     step_token: str | None = Field(None, description="Token to mark generation steps")
     stop_token: str | None = Field(None, description="Token to stop generation")
     rm_name: str | None = Field(
@@ -120,14 +121,23 @@ async def config_service(request: ConfigRequest) -> dict[str, str]:
     logger.info(f"Configuring service with model={request.model}, alg={request.alg}")
 
     try:
-        # Configure language model
-        lm = OpenAICompatibleLanguageModel(
-            endpoint=request.endpoint,
-            api_key=request.api_key,
-            model_name=request.model,
-            is_async=True,  # Enable async mode for better performance
-            # SSL verification enabled by default (same as synchronous requests)
-        )
+        # Configure language model based on provider
+        if request.provider == "litellm":
+            lm = LiteLLMLanguageModel(
+                model_name=request.model,
+                api_key=request.api_key,
+                api_base=request.endpoint if request.endpoint != "auto" else None,
+                is_async=True,  # Enable async mode for better performance
+            )
+        else:
+            # Default to OpenAI compatible
+            lm = OpenAICompatibleLanguageModel(
+                endpoint=request.endpoint,
+                api_key=request.api_key,
+                model_name=request.model,
+                is_async=True,  # Enable async mode for better performance
+                # SSL verification enabled by default (same as synchronous requests)
+            )
         LM_DICT[request.model] = lm
 
         # Configure scaling algorithm
