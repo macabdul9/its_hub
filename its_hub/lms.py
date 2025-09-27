@@ -6,6 +6,13 @@ import aiohttp
 import backoff
 import certifi
 import requests
+import litellm
+
+
+## set litellm logging level to WARNING
+logging.getLogger('litellm').setLevel(logging.WARNING)
+logging.getLogger('litellm.proxy').setLevel(logging.WARNING)
+logging.getLogger('litellm.logging').setLevel(logging.WARNING)
 
 from .base import AbstractLanguageModel
 from .error_handling import (
@@ -351,15 +358,11 @@ class OpenAICompatibleLanguageModel(AbstractLanguageModel):
         tools: list[dict] | None = None,
         tool_choice: str | dict | None = None,
     ) -> list[dict]:
-        import time
-        start_time = time.time()
-        logging.info(f"Starting async _generate with {len(messages_lst)} requests at {start_time}")
 
         # limit concurrency to max_concurrency using a semaphore
         semaphore = asyncio.Semaphore(
             len(messages_lst) if self.max_concurrency == -1 else self.max_concurrency
         )
-        logging.info(f"Using semaphore with limit: {semaphore._value}")
 
         # create a single session for all requests in this call
         # Use the same SSL behavior as requests library
@@ -376,9 +379,7 @@ class OpenAICompatibleLanguageModel(AbstractLanguageModel):
             async def fetch_response(
                 messages: list[ChatMessage], _temperature: float | None
             ) -> dict:
-                request_start = time.time()
                 async with semaphore:
-                    logging.info(f"Request started at {request_start}, acquired semaphore")
                     request_data = self._prepare_request_data(
                         messages,
                         stop,
@@ -673,6 +674,9 @@ class LiteLLMLanguageModel(AbstractLanguageModel):
             request_data["max_tokens"] = self.max_tokens
         if self.temperature is not None:
             request_data["temperature"] = self.temperature
+            logging.info(f"Using temperature: {self.temperature}")
+        else:
+            request_data["temperature"] = 0.7
 
         # override runtime parameters
         if stop is not None:
@@ -681,6 +685,7 @@ class LiteLLMLanguageModel(AbstractLanguageModel):
             request_data["max_tokens"] = max_tokens
         if temperature is not None:
             request_data["temperature"] = temperature
+            logging.info(f"Using temperature: {temperature}")
 
         # add tools and tool_choice if provided
         if tools is not None:
@@ -708,16 +713,13 @@ class LiteLLMLanguageModel(AbstractLanguageModel):
         tools: list[dict] | None = None,
         tool_choice: str | dict | None = None,
     ) -> list[dict]:
-        import litellm
         import time
         start_time = time.time()
-        logging.info(f"Starting async _generate with {len(messages_lst)} requests at {start_time}")
 
         # limit concurrency to max_concurrency using a semaphore
         semaphore = asyncio.Semaphore(
             len(messages_lst) if self.max_concurrency == -1 else self.max_concurrency
         )
-        logging.info(f"Using semaphore with limit: {semaphore._value}")
 
         @backoff.on_exception(
             backoff.expo,
@@ -729,9 +731,7 @@ class LiteLLMLanguageModel(AbstractLanguageModel):
         async def fetch_response(
             messages: list[ChatMessage], _temperature: float | None
         ) -> dict:
-            request_start = time.time()
             async with semaphore:
-                logging.info(f"Request started at {request_start}, acquired semaphore")
                 request_data = self._prepare_request_data(
                     messages,
                     stop,
@@ -784,7 +784,6 @@ class LiteLLMLanguageModel(AbstractLanguageModel):
         tools: list[dict] | None = None,
         tool_choice: str | dict | None = None,
     ) -> dict | list[dict]:
-        import litellm
 
         # Check if we have a single list of messages or a list of message lists
         is_single = not isinstance(messages_or_messages_lst[0], list)
