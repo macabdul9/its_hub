@@ -66,6 +66,38 @@ class ConfigRequest(BaseModel):
         None,
         description="Argument names to exclude from tool voting (e.g., timestamp, id)",
     )
+    use_llm_judge: bool = Field(
+        False,
+        description="Use LLM judge instead of process reward model for best-of-n"
+    )
+    judge_type: str | None = Field(
+        "pointwise",
+        description="Type of judge: 'pointwise' (scores individually) or 'groupwise' (ranks and selects top-N)"
+    )
+    judge_model: str | None = Field(
+        None,
+        description="LiteLLM model name for judge (e.g., 'gpt-4o-mini', 'claude-3-sonnet-20240229')"
+    )
+    judge_criterion: str | None = Field(
+        "overall_quality",
+        description="Evaluation criterion (overall_quality, technical_quality, writing_quality, relevance_quality, tool-judge)"
+    )
+    judge_api_key: str | None = Field(
+        None,
+        description="API key for judge model provider"
+    )
+    judge_base_url: str | None = Field(
+        None,
+        description="Base URL for custom judge endpoint"
+    )
+    judge_temperature: float | None = Field(
+        0.0,
+        description="Temperature for judge model (0.0 for deterministic)"
+    )
+    judge_max_tokens: int | None = Field(
+        512,
+        description="Maximum tokens for judge response"
+    )
 
     @field_validator("alg")
     @classmethod
@@ -93,8 +125,24 @@ class ConfigRequest(BaseModel):
     def validate_rm_name(cls, v, info):
         """Validate reward model name is provided for algorithms that need it."""
         alg = info.data.get("alg")
-        if alg in {"particle-filtering", "best-of-n"} and not v:
-            raise ValueError(f"rm_name is required when using {alg} algorithm")
+        use_llm_judge = info.data.get("use_llm_judge", False)
+
+        # For best-of-n, either rm_name or judge_model is required
+        if alg == "best-of-n":
+            if not use_llm_judge and not v:
+                raise ValueError("rm_name is required when using best-of-n without LLM judge")
+        # For particle-filtering, always need rm_name
+        elif alg == "particle-filtering" and not v:
+            raise ValueError("rm_name is required when using particle-filtering algorithm")
+        return v
+
+    @field_validator("judge_model")
+    @classmethod
+    def validate_judge_model(cls, v, info):
+        """Validate judge model is provided when using LLM judge."""
+        use_llm_judge = info.data.get("use_llm_judge", False)
+        if use_llm_judge and not v:
+            raise ValueError("judge_model is required when use_llm_judge is True")
         return v
 
 
@@ -149,13 +197,41 @@ async def config_service(request: ConfigRequest) -> dict[str, str]:
             SCALING_ALG = ParticleFiltering(sg, prm)
 
         elif request.alg == "best-of-n":
-            prm = LocalVllmProcessRewardModel(
-                model_name=request.rm_name,
-                device=request.rm_device,
-                aggregation_method=AggregationMethod("model"),
-            )
-            # TODO: Consider separating outcome and process reward model interfaces
-            orm = prm  # Using process reward model as outcome reward model
+            if request.use_llm_judge:
+                # Use LLM Judge adapter from its_hub integration
+                try:
+                    from its_hub.integration.reward_hub import LLMJudgeRewardModel
+                except ImportError as e:
+                    logger.error(f"Failed to import LLMJudgeRewardModel: {e}")
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="LLM Judge integration not available",
+                    ) from e
+
+                logger.info(
+                    f"Configuring LLM Judge: model={request.judge_model}, "
+                    f"criterion={request.judge_criterion}"
+                )
+
+                # Create LLM Judge using the adapter (handles ChatMessages conversion)
+                orm = LLMJudgeRewardModel(
+                    model=request.judge_model,
+                    criterion=request.judge_criterion,
+                    api_key=request.judge_api_key,
+                    base_url=request.judge_base_url,
+                    temperature=request.judge_temperature,
+                    max_tokens=request.judge_max_tokens,
+                )
+            else:
+                # Use traditional process reward model
+                prm = LocalVllmProcessRewardModel(
+                    model_name=request.rm_name,
+                    device=request.rm_device,
+                    aggregation_method=AggregationMethod("model"),
+                )
+                # TODO: Consider separating outcome and process reward model interfaces
+                orm = prm  # Using process reward model as outcome reward model
+
             SCALING_ALG = BestOfN(orm)
 
         elif request.alg == "self-consistency":
@@ -319,7 +395,8 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletionResp
             lm.temperature = request.temperature
 
         # Create ChatMessages from the full conversation history
-        chat_messages = ChatMessages(request.messages)
+        # Convert Pydantic ChatMessage objects to list if needed
+        chat_messages = ChatMessages(list(request.messages))
 
         logger.info(
             f"Processing request for model={request.model}, budget={request.budget}"
