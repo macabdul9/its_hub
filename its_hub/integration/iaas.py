@@ -80,7 +80,11 @@ class ConfigRequest(BaseModel):
     )
     judge_criterion: str | None = Field(
         "overall_quality",
-        description="Evaluation criterion (overall_quality, technical_quality, writing_quality, relevance_quality, tool-judge)"
+        description="Evaluation criterion (overall_quality, technical_quality, writing_quality, relevance_quality, tool-judge) or custom criterion name"
+    )
+    judge_custom_prompt: str | None = Field(
+        None,
+        description="Custom evaluation prompt text. If provided, will create a custom criterion with judge_criterion as the name."
     )
     judge_api_key: str | None = Field(
         None,
@@ -201,12 +205,24 @@ async def config_service(request: ConfigRequest) -> dict[str, str]:
                 # Use LLM Judge adapter from its_hub integration
                 try:
                     from its_hub.integration.reward_hub import LLMJudgeRewardModel
+                    from reward_hub import AutoJudge
                 except ImportError as e:
-                    logger.error(f"Failed to import LLMJudgeRewardModel: {e}")
+                    logger.error(f"Failed to import LLM Judge: {e}")
                     raise HTTPException(
                         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                         detail="LLM Judge integration not available",
                     ) from e
+
+                # Register custom criterion if custom prompt provided
+                if request.judge_custom_prompt:
+                    logger.info(
+                        f"Registering custom criterion: {request.judge_criterion}"
+                    )
+                    AutoJudge.register_criterion(
+                        name=request.judge_criterion,
+                        prompt_text=request.judge_custom_prompt,
+                        description=f"Custom criterion: {request.judge_criterion}",
+                    )
 
                 logger.info(
                     f"Configuring LLM Judge: model={request.judge_model}, "
