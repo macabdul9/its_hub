@@ -1,6 +1,7 @@
+import logging
+import math
 import random
 import re
-import math
 from collections import Counter
 from collections.abc import Callable
 
@@ -13,6 +14,16 @@ from its_hub.base import (
     AbstractScalingResult,
 )
 from its_hub.types import ChatMessage, ChatMessages
+
+def _default_projection_func(response: str) -> str:
+    """Default projection function that uses exact content matching.
+    This function strips whitespace and returns the content as-is for voting.
+    Responses with identical content (after stripping) will be considered equivalent.
+    Args:
+        response: The response content string to project.
+    Returns:
+        The stripped response content.
+    """
 
 
 def setup_logging():
@@ -190,22 +201,13 @@ class SelfConsistency(AbstractScalingAlgorithm):
         tools: list[dict] | None = None,
         tool_choice: str | dict | None = None,
     ) -> dict | SelfConsistencyResult:
-        """Async version of infer for true async performance."""
-        # Convert to uniform ChatMessages format
+        """run inference asynchronously with self-consistency"""
         chat_messages = ChatMessages.from_prompt_or_messages(prompt_or_messages)
 
-        # generate responses using async method
-        if hasattr(lm, 'agenerate'):
-            responses = await lm.agenerate(
-                chat_messages.to_batch(budget), tools=tools, tool_choice=tool_choice
-            )
-        else:
-            # Fall back to sync generation if async not available
-            responses = lm.generate(
-                chat_messages.to_batch(budget), tools=tools, tool_choice=tool_choice
-            )
-
-        return self._process_responses(responses, return_response_only)
+        # generate responses
+        responses = await lm.agenerate(
+            chat_messages.to_batch(budget), tools=tools, tool_choice=tool_choice
+        )
 
     def _process_responses(
         self,
@@ -225,13 +227,13 @@ class SelfConsistency(AbstractScalingAlgorithm):
                 "but tool_vote is not set. Consider setting tool_vote parameter "
                 "(e.g., 'tool_name', 'tool_args', 'tool_hierarchical') for tool call voting."
             )
-            logger.info(f"Tool call count: {tool_call_count}")
+
         # Determine eligible responses and create projections
         if has_majority_tool_calls and self.tool_vote:
+            logging.info("Tool voting is invoked")
             eligible_indices = [
                 i for i, r in enumerate(responses) if r.get("tool_calls")
             ]
-            logger.info(f"Eligible indices: {eligible_indices}")
             responses_projected = [
                 self._extract_tool_call_features(responses[i]) for i in eligible_indices
             ]
@@ -286,12 +288,11 @@ class SelfConsistency(AbstractScalingAlgorithm):
         tools: list[dict] | None = None,
         tool_choice: str | dict | None = None,
     ) -> dict | SelfConsistencyResult:
-        """Sync version of infer."""
-        chat_messages = ChatMessages.from_prompt_or_messages(prompt_or_messages)
-        responses = lm.generate(
-            chat_messages.to_batch(budget), tools=tools, tool_choice=tool_choice
+        """run inference synchronously with self-consistency"""
+        import asyncio
+        return asyncio.run(
+            self.ainfer(lm, prompt_or_messages, budget, return_response_only, tools, tool_choice)
         )
-        return self._process_responses(responses, return_response_only)
 
     def _extract_tool_call_features(self, message_obj: dict):
         """Extract tool call features for voting based on tool_vote type."""

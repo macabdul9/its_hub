@@ -14,12 +14,21 @@ def extract_content_from_lm_response(message: dict) -> str:
         message: A message dict returned by fetch_single_response.
 
     Returns:
-        The content string.
-
-    Raises:
-        NotImplementedError: If tool calls are present in the message.
+        The content string. If the message contains tool calls, returns the content
+        if available, otherwise returns an empty string.
     """
-    if message.get("tool_calls"):
-        raise NotImplementedError("Tool calls are not supported by this algorithm yet")
+    # Extract text content (may be empty if message only has tool calls)
+    content = message.get("content", "") or ""
 
-    return message.get("content", "")
+    # If there are tool calls but no text content, create a text representation
+    if message.get("tool_calls") and not content:
+        tool_calls = message.get("tool_calls", [])
+        tool_descriptions = []
+        for tc in tool_calls:
+            if isinstance(tc, dict) and "function" in tc:
+                func = tc["function"]
+                func_name = func.get("name", "unknown")
+                tool_descriptions.append(f"[Tool call: {func_name}]")
+        content = " ".join(tool_descriptions) if tool_descriptions else ""
+
+    return content
