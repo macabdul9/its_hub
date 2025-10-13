@@ -173,7 +173,6 @@ class ParticleGibbs(AbstractScalingAlgorithm):
         lm: AbstractLanguageModel,
         particles: list[Particle],
         prompt: str,
-        batched: bool = False,
         tools: list[dict] | None = None,
         tool_choice: str | dict | None = None,
     ) -> list[Particle]:

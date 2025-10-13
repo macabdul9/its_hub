@@ -59,7 +59,7 @@ class BeamSearch(AbstractScalingAlgorithm):
         tools: list[dict] | None = None,
         tool_choice: str | dict | None = None,
     ) -> list[Path]:
-        """search one level asynchronously (batched)"""
+        """search one level asynchronously"""
         is_stopped_in_the_beginning = [c.is_stopped for c in candidates]
 
         # collect batch inputs
@@ -116,7 +116,6 @@ class BeamSearch(AbstractScalingAlgorithm):
         lm: AbstractLanguageModel,
         candidates: list[Path],
         prompt: str,
-        batched: bool = False,
         tools: list[dict] | None = None,
         tool_choice: str | dict | None = None,
     ) -> list[Path]:
