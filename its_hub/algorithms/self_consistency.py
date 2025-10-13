@@ -14,6 +14,7 @@ from its_hub.base import (
 )
 from its_hub.types import ChatMessage, ChatMessages
 
+
 def _default_projection_func(response: str) -> str:
     """Default projection function that uses exact content matching.
     This function strips whitespace and returns the content as-is for voting.
