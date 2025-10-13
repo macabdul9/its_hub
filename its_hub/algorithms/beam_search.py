@@ -184,21 +184,3 @@ class BeamSearch(AbstractScalingAlgorithm):
             steps_used=steps_used,
         )
         return result.the_one if return_response_only else result
-
-    def infer(
-        self,
-        lm: AbstractLanguageModel,
-        prompt_or_messages: str | list[ChatMessage] | ChatMessages,
-        budget: int,
-        return_response_only: bool = True,
-        tools: list[dict] | None = None,
-        tool_choice: str | dict | None = None,
-    ) -> dict | BeamSearchResult:
-        """run inference synchronously with beam search"""
-        import asyncio
-
-        return asyncio.run(
-            self.ainfer(
-                lm, prompt_or_messages, budget, return_response_only, tools, tool_choice
-            )
-        )
