@@ -1,7 +1,10 @@
 from reward_hub.base import AggregationMethod
+from reward_hub import AutoJudge
 
 from its_hub.base import AbstractProcessRewardModel, AbstractOutcomeRewardModel
 from its_hub.types import ChatMessage, ChatMessages
+from typing import Optional
+
 
 
 class LocalVllmProcessRewardModel(AbstractProcessRewardModel):
@@ -61,7 +64,7 @@ class LocalVllmProcessRewardModel(AbstractProcessRewardModel):
         import asyncio
 
         return asyncio.run(self.ascore(prompt_or_messages, response_or_responses))
-
+    
 
 class LLMJudgeRewardModel(AbstractOutcomeRewardModel):
     """
@@ -74,11 +77,13 @@ class LLMJudgeRewardModel(AbstractOutcomeRewardModel):
     def __init__(
         self,
         model: str,
+        judge_type: str,
         criterion: str = "overall_quality",
         api_key: str | None = None,
         base_url: str | None = None,
         temperature: float = 0.0,
         max_tokens: int = 512,
+        top_n: Optional[int] = None,
         **litellm_kwargs,
     ):
         """
@@ -95,11 +100,14 @@ class LLMJudgeRewardModel(AbstractOutcomeRewardModel):
             max_tokens: Maximum tokens for judge response
             **litellm_kwargs: Additional arguments passed to LiteLLM
         """
-        from reward_hub import AutoJudge
+        
+        if judge_type=="groupwise" and top_n is None:
+            raise ValueError("top_n must be specified for groupwise judge")
+        
 
         self.judge = AutoJudge.from_litellm(
             model=model,
-            judge_type="pointwise",
+            judge_type=judge_type,
             criterion=criterion,
             api_key=api_key,
             base_url=base_url,
@@ -107,13 +115,17 @@ class LLMJudgeRewardModel(AbstractOutcomeRewardModel):
             max_tokens=max_tokens,
             **litellm_kwargs,
         )
+        
+        self.judge_type = judge_type
         self.criterion = criterion
         self.model = model
+        self.top_n = top_n
+        
 
     def score(
         self,
         prompt_or_messages: str | list[ChatMessage] | ChatMessages,
-        response: str | list[str],
+        response: str | list[str]
     ) -> float | list[float]:
         """
         Score response(s) using the LLM judge.
@@ -167,7 +179,11 @@ class LLMJudgeRewardModel(AbstractOutcomeRewardModel):
 
         # Call judge with multiple conversations
         # Judge expects List[List[dict]] for multiple conversations
-        raw_scores = await self.judge.ascore(conversations)
+        
+        if self.judge_type == "groupwise":
+            raw_scores = await self.judge.ascore(conversations, top_n=self.top_n)
+        else:
+            raw_scores = await self.judge.ascore(conversations)
 
         # Normalize scores to 0-1 range
         if is_single_response:
