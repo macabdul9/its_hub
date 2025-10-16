@@ -71,7 +71,7 @@ class ConfigRequest(BaseModel):
         description="Use LLM judge instead of process reward model for best-of-n"
     )
     judge_type: str | None = Field(
-        "pointwise",
+        "groupwise",
         description="Type of judge: 'pointwise' (scores individually) or 'groupwise' (ranks and selects top-N)"
     )
     judge_model: str | None = Field(
@@ -101,6 +101,14 @@ class ConfigRequest(BaseModel):
     judge_max_tokens: int | None = Field(
         512,
         description="Maximum tokens for judge response"
+    )
+    enable_judge_logging: bool | None = Field(
+        True,
+        description="Enable logging of judge scores and reasoning"
+    )
+    judge_top_n: int | None = Field(
+        1,
+        description="For groupwise judges, number of top responses to select"
     )
 
     @field_validator("alg")
@@ -205,7 +213,7 @@ async def config_service(request: ConfigRequest) -> dict[str, str]:
                 # Use LLM Judge adapter from its_hub integration
                 try:
                     from its_hub.integration.reward_hub import LLMJudgeRewardModel
-                    from reward_hub import AutoJudge
+                    from reward_hub.llm_judge.prompts import Criterion, CriterionRegistry
                 except ImportError as e:
                     logger.error(f"Failed to import LLM Judge: {e}")
                     raise HTTPException(
@@ -218,11 +226,12 @@ async def config_service(request: ConfigRequest) -> dict[str, str]:
                     logger.info(
                         f"Registering custom criterion: {request.judge_criterion}"
                     )
-                    AutoJudge.register_criterion(
+                    custom_criterion = Criterion(
                         name=request.judge_criterion,
-                        prompt_text=request.judge_custom_prompt,
+                        content=request.judge_custom_prompt,
                         description=f"Custom criterion: {request.judge_criterion}",
                     )
+                    CriterionRegistry.register(custom_criterion)
 
                 logger.info(
                     f"Configuring LLM Judge: model={request.judge_model}, "
@@ -230,25 +239,26 @@ async def config_service(request: ConfigRequest) -> dict[str, str]:
                 )
 
                 # Create LLM Judge using the adapter (handles ChatMessages conversion)
-                orm = LLMJudgeRewardModel(
+                reward_model = LLMJudgeRewardModel(
                     model=request.judge_model,
                     criterion=request.judge_criterion,
+                    judge_type=request.judge_type or "groupwise",
                     api_key=request.judge_api_key,
                     base_url=request.judge_base_url,
                     temperature=request.judge_temperature,
                     max_tokens=request.judge_max_tokens,
+                    enable_judge_logging=request.enable_judge_logging if request.enable_judge_logging is not None else True,
+                    top_n=request.judge_top_n or 1,
                 )
             else:
                 # Use traditional process reward model
-                prm = LocalVllmProcessRewardModel(
+                reward_model = LocalVllmProcessRewardModel(
                     model_name=request.rm_name,
                     device=request.rm_device,
                     aggregation_method=AggregationMethod("model"),
                 )
-                # TODO: Consider separating outcome and process reward model interfaces
-                orm = prm  # Using process reward model as outcome reward model
 
-            SCALING_ALG = BestOfN(orm)
+            SCALING_ALG = BestOfN(reward_model)
 
         elif request.alg == "self-consistency":
             # Create projection function from regex patterns
