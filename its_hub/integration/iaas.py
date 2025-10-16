@@ -47,7 +47,8 @@ class ConfigRequest(BaseModel):
     step_token: str | None = Field(None, description="Token to mark generation steps")
     stop_token: str | None = Field(None, description="Token to stop generation")
     rm_name: str | None = Field(
-        None, description="Reward model name (not required for self-consistency)"
+        None,
+        description="Reward model name or 'llm-judge' to use LLM-as-a-judge (not required for self-consistency)",
     )
     rm_device: str | None = Field(
         None, description="Device for reward model (e.g., 'cuda:0')"
@@ -62,9 +63,40 @@ class ConfigRequest(BaseModel):
         None,
         description="Tool voting strategy: 'tool_name', 'tool_args', 'tool_hierarchical'",
     )
-    exclude_args: list[str] | None = Field(
+    exclude_tool_args: list[str] | None = Field(
         None,
-        description="Argument names to exclude from tool voting (e.g., timestamp, id)",
+        description="Tool argument names to exclude from voting (e.g., ['timestamp', 'id'])",
+    )
+
+    # LLM Judge settings (only used when rm_name='llm-judge')
+    judge_model: str | None = Field(
+        None,
+        description="LiteLLM model name for judge (required when rm_name='llm-judge')",
+    )
+    judge_base_url: str | None = Field(
+        None,
+        description="Base URL for judge endpoint (required when rm_name='llm-judge')",
+    )
+    judge_criterion: str | None = Field(
+        "overall_quality",
+        description="Built-in criterion ('overall_quality', 'multi_step_tool_judge') OR custom evaluation description/prompt",
+    )
+    judge_mode: str | None = Field(
+        "groupwise",
+        description="'pointwise' (score each individually) or 'groupwise' (rank and select top-N)",
+    )
+    judge_top_n: int | None = Field(
+        1, description="For groupwise: number of top responses to select"
+    )
+    judge_api_key: str | None = Field(None, description="API key for judge model")
+    judge_temperature: float | None = Field(
+        0.0, description="Judge temperature (0.0 for deterministic)"
+    )
+    judge_max_tokens: int | None = Field(
+        4096, description="Maximum tokens for judge response"
+    )
+    enable_judge_logging: bool | None = Field(
+        True, description="Log judge scores and reasoning"
     )
 
     @field_validator("alg")
@@ -93,8 +125,29 @@ class ConfigRequest(BaseModel):
     def validate_rm_name(cls, v, info):
         """Validate reward model name is provided for algorithms that need it."""
         alg = info.data.get("alg")
-        if alg in {"particle-filtering", "best-of-n"} and not v:
-            raise ValueError(f"rm_name is required when using {alg} algorithm")
+
+        if alg == "best-of-n" and not v:
+            raise ValueError(
+                "rm_name is required for best-of-n (use model name or 'llm-judge')"
+            )
+        elif alg == "particle-filtering" and not v:
+            raise ValueError("rm_name is required for particle-filtering")
+        return v
+
+    @field_validator("judge_model")
+    @classmethod
+    def validate_judge_model(cls, v, info):
+        """Validate judge model is provided when using LLM judge."""
+        if info.data.get("rm_name") == "llm-judge" and not v:
+            raise ValueError("judge_model is required when rm_name='llm-judge'")
+        return v
+
+    @field_validator("judge_base_url")
+    @classmethod
+    def validate_judge_base_url(cls, v, info):
+        """Validate judge base URL is provided when using LLM judge."""
+        if info.data.get("rm_name") == "llm-judge" and not v:
+            raise ValueError("judge_base_url is required when rm_name='llm-judge'")
         return v
 
 
@@ -149,14 +202,69 @@ async def config_service(request: ConfigRequest) -> dict[str, str]:
             SCALING_ALG = ParticleFiltering(sg, prm)
 
         elif request.alg == "best-of-n":
-            prm = LocalVllmProcessRewardModel(
-                model_name=request.rm_name,
-                device=request.rm_device,
-                aggregation_method=AggregationMethod("model"),
-            )
-            # TODO: Consider separating outcome and process reward model interfaces
-            orm = prm  # Using process reward model as outcome reward model
-            SCALING_ALG = BestOfN(orm)
+            if request.rm_name == "llm-judge":
+                # Use LLM Judge adapter from its_hub integration
+                try:
+                    from its_hub.integration.reward_hub import LLMJudgeRewardModel
+                    from reward_hub.llm_judge.prompts import (
+                        Criterion,
+                        CriterionRegistry,
+                    )
+                except ImportError as e:
+                    logger.error(f"Failed to import LLM Judge: {e}")
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="LLM Judge integration not available",
+                    ) from e
+
+                # Check if it's a built-in criterion or custom
+                built_in_criteria = {"overall_quality", "multi_step_tool_judge"}
+
+                if request.judge_criterion in built_in_criteria:
+                    criterion_to_use = request.judge_criterion
+                    logger.info(f"Using built-in criterion: {request.judge_criterion}")
+                else:
+                    # Custom criterion - register it with auto-generated name
+                    criterion_name = (
+                        f"custom_{hash(request.judge_criterion) & 0xFFFFFFFF:08x}"
+                    )
+                    logger.info(f"Registering custom criterion as: {criterion_name}")
+                    custom_criterion = Criterion(
+                        name=criterion_name,
+                        content=request.judge_criterion,
+                        description="Custom evaluation criterion",
+                    )
+                    CriterionRegistry.register(custom_criterion)
+                    criterion_to_use = criterion_name
+
+                logger.info(
+                    f"Configuring LLM Judge: model={request.judge_model}, "
+                    f"criterion={criterion_to_use}, mode={request.judge_mode}"
+                )
+
+                # Create LLM Judge using the adapter (handles ChatMessages conversion)
+                reward_model = LLMJudgeRewardModel(
+                    model=request.judge_model,
+                    criterion=criterion_to_use,
+                    judge_type=request.judge_mode or "groupwise",
+                    api_key=request.judge_api_key,
+                    base_url=request.judge_base_url,
+                    temperature=request.judge_temperature,
+                    max_tokens=request.judge_max_tokens,
+                    enable_judge_logging=request.enable_judge_logging
+                    if request.enable_judge_logging is not None
+                    else True,
+                    top_n=request.judge_top_n or 1,
+                )
+            else:
+                # Use traditional process reward model
+                reward_model = LocalVllmProcessRewardModel(
+                    model_name=request.rm_name,
+                    device=request.rm_device,
+                    aggregation_method=AggregationMethod("model"),
+                )
+
+            SCALING_ALG = BestOfN(reward_model)
 
         elif request.alg == "self-consistency":
             # Create projection function from regex patterns
@@ -169,7 +277,7 @@ async def config_service(request: ConfigRequest) -> dict[str, str]:
             SCALING_ALG = SelfConsistency(
                 projection_func,
                 tool_vote=request.tool_vote,
-                exclude_args=request.exclude_args,
+                exclude_args=request.exclude_tool_args,
             )
 
         logger.info(f"Successfully configured {request.alg} algorithm")
@@ -250,6 +358,7 @@ class ChatCompletionUsage(BaseModel):
 def _extract_algorithm_metadata(algorithm_result: Any) -> dict[str, Any] | None:
     """Extract metadata from algorithm results for API response."""
     from its_hub.algorithms.self_consistency import SelfConsistencyResult
+    from its_hub.algorithms.bon import BestOfNResult
 
     if isinstance(algorithm_result, SelfConsistencyResult):
         return {
@@ -259,6 +368,13 @@ def _extract_algorithm_metadata(algorithm_result: Any) -> dict[str, Any] | None:
             "selected_index": algorithm_result.selected_index,
         }
 
+    elif isinstance(algorithm_result, BestOfNResult):
+        return {
+            "algorithm": "best-of-n",
+            "responses": algorithm_result.responses,
+            "scores": algorithm_result.scores,
+            "selected_index": algorithm_result.selected_index,
+        }
     # TODO: Add metadata extraction for other algorithm result types
     # elif isinstance(algorithm_result, BestOfNResult):
     #     return {
@@ -319,7 +435,8 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletionResp
             lm.temperature = request.temperature
 
         # Create ChatMessages from the full conversation history
-        chat_messages = ChatMessages(request.messages)
+        # Convert Pydantic ChatMessage objects to list if needed
+        chat_messages = ChatMessages(list(request.messages))
 
         logger.info(
             f"Processing request for model={request.model}, budget={request.budget}"
