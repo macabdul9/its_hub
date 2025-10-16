@@ -6,24 +6,33 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Installation and Setup
 ```bash
-# Development installation (includes all dependencies)
+# Development installation with uv (recommended)
+uv sync --extra dev
+
+# Alternative: pip installation
 pip install -e ".[dev]"
 
 # Production installation
 pip install its_hub
 ```
 
-
 ### Contribution
 When commit or raising PR, never mention it is by ClaudeCode.
 never say 🤖 Generated with [Claude Code](https://claude.ai/code)" in the commit statment, don't mention claude!
+
 ### Testing
 ```bash
 # Run all tests
-pytest tests
+uv run pytest tests/
+
+# Run specific test file
+uv run pytest tests/test_algorithms.py
 
 # Run tests with coverage
-pytest tests --cov=its_hub
+uv run pytest tests/ --cov=its_hub
+
+# Run tests with verbose output
+uv run pytest tests/ -v
 ```
 
 ### Code Quality
@@ -53,6 +62,25 @@ python scripts/test_math_example.py
 
 # Benchmark algorithms (see script help for full options)
 python scripts/benchmark.py --help
+```
+
+### IaaS Service (Inference-as-a-Service)
+```bash
+# Start IaaS service
+uv run its-iaas --host 0.0.0.0 --port 8108
+
+# Or using justfile (if available)
+just iaas-start
+
+# Check service health
+curl -s http://localhost:8108/v1/models | jq .
+
+# Configure the service (example: self-consistency algorithm)
+curl -X POST http://localhost:8108/configure \
+  -H "Content-Type: application/json" \
+  -d '{"endpoint": "http://localhost:8100/v1", "api_key": "NO_API_KEY", "model": "your-model-name", "alg": "self-consistency"}'
+
+# For comprehensive IaaS setup (multi-GPU, reward models, etc.), see docs/iaas-service.md
 ```
 
 ## Additional Tips
