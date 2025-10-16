@@ -187,8 +187,8 @@ class TestSelfConsistencyToolVote:
         assert response.status_code == 200
         assert "success" in response.json()["status"]
 
-    def test_self_consistency_with_exclude_args(self, iaas_client, vllm_server):
-        """Test self-consistency configuration with exclude_args."""
+    def test_self_consistency_with_exclude_tool_args(self, iaas_client, vllm_server):
+        """Test self-consistency configuration with exclude_tool_args."""
         config_data = {
             "endpoint": vllm_server,
             "api_key": TEST_CONSTANTS["DEFAULT_API_KEY"],
@@ -196,7 +196,7 @@ class TestSelfConsistencyToolVote:
             "alg": "self-consistency",
             "regex_patterns": [r"\\boxed{([^}]+)}"],
             "tool_vote": "tool_args",
-            "exclude_args": ["timestamp", "request_id"]
+            "exclude_tool_args": ["timestamp", "request_id"]
         }
 
         response = iaas_client.post("/configure", json=config_data)
@@ -212,7 +212,7 @@ class TestSelfConsistencyToolVote:
             "alg": "self-consistency",
             "regex_patterns": [r"\\boxed{([^}]+)}"],
             "tool_vote": "tool_hierarchical",
-            "exclude_args": ["timestamp", "id", "session_id"]
+            "exclude_tool_args": ["timestamp", "id", "session_id"]
         }
 
         response = iaas_client.post("/configure", json=config_data)
@@ -247,7 +247,7 @@ class TestSelfConsistencyToolVote:
                 "alg": "self-consistency",
                 "regex_patterns": [r"\\boxed{([^}]+)}"],
                 "tool_vote": "tool_hierarchical",
-                "exclude_args": ["timestamp", "id"]
+                "exclude_tool_args": ["timestamp", "id"]
             }
 
             response = iaas_client.post("/configure", json=config_data)
@@ -299,8 +299,8 @@ class TestSelfConsistencyToolVote:
 
     @pytest.mark.parametrize("tool_vote_config", [
         {"tool_vote": "tool_name"},
-        {"tool_vote": "tool_args", "exclude_args": ["id"]},
-        {"tool_vote": "tool_hierarchical", "exclude_args": ["timestamp", "session_id"]},
+        {"tool_vote": "tool_args", "exclude_tool_args": ["id"]},
+        {"tool_vote": "tool_hierarchical", "exclude_tool_args": ["timestamp", "session_id"]},
     ])
     def test_various_tool_vote_configurations(self, iaas_client, vllm_server, tool_vote_config):
         """Test various valid tool-vote configurations."""
@@ -523,15 +523,15 @@ class TestPydanticModels:
             alg="self-consistency",
             regex_patterns=[r"\\boxed{([^}]+)}"],
             tool_vote="tool_hierarchical",
-            exclude_args=["timestamp", "id"]
+            exclude_tool_args=["timestamp", "id"]
         )
 
         assert config.tool_vote == "tool_hierarchical"
-        assert config.exclude_args == ["timestamp", "id"]
+        assert config.exclude_tool_args == ["timestamp", "id"]
         assert config.regex_patterns == [r"\\boxed{([^}]+)}"]
 
     def test_config_request_tool_vote_optional(self):
-        """Test that tool_vote and exclude_args are optional."""
+        """Test that tool_vote and exclude_tool_args are optional."""
         config = ConfigRequest(
             endpoint="http://localhost:8000",
             api_key=TEST_CONSTANTS["DEFAULT_API_KEY"],
@@ -541,7 +541,7 @@ class TestPydanticModels:
         )
 
         assert config.tool_vote is None
-        assert config.exclude_args is None
+        assert config.exclude_tool_args is None
 
     def test_chat_completion_request_with_return_response_only(self):
         """Test ChatCompletionRequest with return_response_only parameter."""
