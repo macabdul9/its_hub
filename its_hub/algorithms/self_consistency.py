@@ -6,7 +6,6 @@ from collections import Counter
 from collections.abc import Callable
 
 from pydantic.dataclasses import dataclass
-import logging
 
 from its_hub.base import (
     AbstractLanguageModel,
@@ -14,7 +13,6 @@ from its_hub.base import (
     AbstractScalingResult,
 )
 from its_hub.types import ChatMessage, ChatMessages
-
 
 
 def _default_projection_func(response: str) -> str:
@@ -26,8 +24,6 @@ def _default_projection_func(response: str) -> str:
     Returns:
         The stripped response content.
     """
-
-
     return response.strip()
 
 
@@ -60,7 +56,6 @@ def _select_most_common_or_random(
     # note above implementation ensures that if there are multiple
     #      elements with the same count, a random one is selected
     selected_index = random.choice(most_common_indices)
-    
 
     return counts, selected_index
 
@@ -182,6 +177,9 @@ class SelfConsistency(AbstractScalingAlgorithm):
         responses = await lm.agenerate(
             chat_messages.to_batch(budget), tools=tools, tool_choice=tool_choice
         )
+
+        # process responses and return result
+        return self._process_responses(responses, return_response_only)
 
     def _process_responses(
         self,
