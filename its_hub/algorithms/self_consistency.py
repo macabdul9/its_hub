@@ -24,7 +24,6 @@ def _default_projection_func(response: str) -> str:
     Returns:
         The stripped response content.
     """
-
     return response.strip()
 
 
@@ -159,9 +158,6 @@ class SelfConsistency(AbstractScalingAlgorithm):
         self.consistency_space_projection_func = (
             consistency_space_projection_func or _default_projection_func
         )
-        logging.info(
-            f"Initializing with projection function: {self.consistency_space_projection_func}"
-        )
         self.tool_vote = tool_vote
         self.exclude_args = exclude_args or []
 
@@ -182,6 +178,15 @@ class SelfConsistency(AbstractScalingAlgorithm):
             chat_messages.to_batch(budget), tools=tools, tool_choice=tool_choice
         )
 
+        # process responses and return result
+        return self._process_responses(responses, return_response_only)
+
+    def _process_responses(
+        self,
+        responses: list[dict],
+        return_response_only: bool = True
+    ) -> dict | SelfConsistencyResult:
+        """Process responses and return result."""
         # Check if majority of responses have tool calls to decide voting method
         tool_call_count = sum(1 for r in responses if r.get("tool_calls"))
         required_majority = math.ceil(len(responses) / 2)
@@ -197,7 +202,6 @@ class SelfConsistency(AbstractScalingAlgorithm):
 
         # Determine eligible responses and create projections
         if has_majority_tool_calls and self.tool_vote:
-            logging.info("Tool voting is invoked")
             eligible_indices = [
                 i for i, r in enumerate(responses) if r.get("tool_calls")
             ]
@@ -337,6 +341,10 @@ def create_regex_projection_function(
     def projection_function(response: str) -> tuple:
         """Extract features from response using compiled regex patterns."""
         results = []
+
+        # Handle None or empty response
+        if response is None:
+            response = ""
 
         for pattern in compiled_patterns:
             match = pattern.search(response)
