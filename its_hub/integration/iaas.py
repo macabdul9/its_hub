@@ -167,10 +167,10 @@ async def config_service(request: ConfigRequest) -> dict[str, str]:
     """Configure the IaaS service with language model and scaling algorithm."""
     # Only import reward_hub if needed (not required for self-consistency)
     if request.alg in {"particle-filtering", "best-of-n"}:
+        
         try:
             from its_hub.integration.reward_hub import (
                 AggregationMethod,
-                LocalVllmProcessRewardModel,
             )
         except ImportError as e:
             logger.error(f"Failed to import reward_hub: {e}")
@@ -178,6 +178,13 @@ async def config_service(request: ConfigRequest) -> dict[str, str]:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Reward hub integration not available",
             ) from e
+
+    if request.alg == "best-of-n" and request.rm_name != "llm-judge" or request.alg == "particle-filtering":
+        try:
+            from its_hub.integration.reward_hub import LocalVllmProcessRewardModel
+        except ImportError as e:
+            logger.error(f"vLLM is required; install with `pip install its-hub[vllm]`: {e}")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="vLLM is required; install with `pip install its-hub[vllm]`") from e
 
     global LM_DICT, SCALING_ALG
 
