@@ -25,7 +25,7 @@ dependencies = [
     "openai>=1.75.0",
     "tqdm>=4.65.0",
     "typing-extensions>=4.0.0",
-    "reward-hub @ git+https://github.com/Red-Hat-AI-Innovation-Team/reward_hub.git@main",
+    "reward-hub==0.1.5",
     "transformers==4.53.2",  # Pin to exact version that worked in CI to avoid aimv2 config conflict with vLLM 0.9.1
     "backoff>=2.2.0",
     "click>=8.1.0",
@@ -50,6 +50,11 @@ local_scheme = "no-local-version"
 Homepage = "https://ai-innovation.team/its_hub"
 
 [project.optional-dependencies]
+
+vllm = [
+    "reward-hub[vllm]==0.1.5",
+]
+
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.26.0",
@@ -57,6 +62,7 @@ dev = [
     "ruff>=0.8.0",
     "jupytext>=1.15.0",
     "jupyter>=1.0.0",
+    "reward-hub[vllm]==0.1.5",
 ]
 research = [
     "math-verify>=0.1.0",  # For mathematical reasoning evaluation in benchmark scripts
