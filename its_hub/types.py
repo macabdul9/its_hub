@@ -62,7 +62,7 @@ class ChatMessage:
             elif content_type == "image_url":
                 has_image = True
             elif content_type:
-                logging.warning(f"Unsupported content type '{content_type}' detected and will be ignored.")
+                raise ValueError(f"Unsupported content type '{content_type}' in messages content dict.")
 
         if has_image:
             logging.warning(
