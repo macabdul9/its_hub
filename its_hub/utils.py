@@ -37,7 +37,7 @@ def extract_content_from_lm_response(message: dict) -> str:
         ]
         content = " ".join(text_parts)
     else:
-        content = ""
+        raise ValueError(f"Invalid content type: {type(raw_content)}, expected str, list[dict], or None")
 
     # If there are tool calls but no text content, create a text representation
     if message.get("tool_calls") and not content:
