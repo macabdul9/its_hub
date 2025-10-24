@@ -655,6 +655,110 @@ class TestBestOfN:
 
         assert result["content"] == "response2"
 
+    def test_deduplication_all_identical(self):
+        """Test Best-of-N with all identical responses - should skip scoring."""
+        # All responses are identical
+        mock_lm = StepMockLanguageModel(["response1", "response1", "response1", "response1"])
+        # Mock ORM should not be called since we skip scoring for identical responses
+        mock_orm = MockOutcomeRewardModel([])
+
+        bon = BestOfN(mock_orm)
+        result = bon.infer(mock_lm, "test prompt", budget=4, return_response_only=False)
+
+        assert isinstance(result, BestOfNResult)
+        # Should select first response
+        assert result.selected_index == 0
+        assert result.the_one["content"] == "response1"
+        # All identical responses should have score 1
+        assert result.scores == [1, 1, 1, 1]
+        # Verify ORM was never called
+        assert mock_orm.score_call_count == 0
+
+    def test_deduplication_some_duplicates(self):
+        """Test Best-of-N with some duplicate responses - should deduplicate before scoring."""
+        # 8 responses: 3x "response1", 2x "response2", 2x "response3", 1x "response4"
+        mock_lm = StepMockLanguageModel([
+            "response1", "response2", "response1", "response3",
+            "response2", "response1", "response4", "response3"
+        ])
+        # Only 4 unique responses should be scored: response1, response2, response3, response4
+        # Scores: response2 has highest score (0.9)
+        mock_orm = MockOutcomeRewardModel([0.5, 0.9, 0.3, 0.7])
+
+        bon = BestOfN(mock_orm)
+        result = bon.infer(mock_lm, "test prompt", budget=8, return_response_only=False)
+
+        assert isinstance(result, BestOfNResult)
+        # response2 should be selected (appears at indices 1 and 4)
+        assert result.selected_index in [1, 4]
+        assert result.the_one["content"] == "response2"
+        # Verify all 8 responses have scores
+        assert len(result.scores) == 8
+        # Verify score mapping: indices with same content have same score
+        assert result.scores[0] == result.scores[2] == result.scores[5] == 0.5  # response1
+        assert result.scores[1] == result.scores[4] == 0.9  # response2
+        assert result.scores[3] == result.scores[7] == 0.3  # response3
+        assert result.scores[6] == 0.7  # response4
+        # Verify ORM was called only once (batched) with 4 unique responses
+        assert mock_orm.score_call_count == 1
+        # Verify 4 scores were returned in that single call
+        assert mock_orm.call_count == 4
+
+    def test_deduplication_all_unique(self):
+        """Test Best-of-N with all unique responses - should score all responses."""
+        mock_lm = StepMockLanguageModel(["response1", "response2", "response3"])
+        mock_orm = MockOutcomeRewardModel([0.5, 0.8, 0.3])
+
+        bon = BestOfN(mock_orm)
+        result = bon.infer(mock_lm, "test prompt", budget=3, return_response_only=False)
+
+        assert isinstance(result, BestOfNResult)
+        assert result.selected_index == 1
+        assert result.the_one["content"] == "response2"
+        # All 3 responses are unique, so all should be scored
+        assert result.scores == [0.5, 0.8, 0.3]
+        # ORM should be called once with all 3 unique responses
+        assert mock_orm.score_call_count == 1
+        assert mock_orm.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_ainfer_deduplication_all_identical(self):
+        """Test async Best-of-N with all identical responses - should skip scoring."""
+        mock_lm = StepMockLanguageModel(["response1", "response1", "response1", "response1"])
+        mock_orm = MockOutcomeRewardModel([])
+
+        bon = BestOfN(mock_orm)
+        result = await bon.ainfer(mock_lm, "test prompt", budget=4, return_response_only=False)
+
+        assert isinstance(result, BestOfNResult)
+        assert result.selected_index == 0
+        assert result.the_one["content"] == "response1"
+        assert result.scores == [1, 1, 1, 1]
+        assert mock_orm.score_call_count == 0
+
+    @pytest.mark.asyncio
+    async def test_ainfer_deduplication_some_duplicates(self):
+        """Test async Best-of-N with some duplicate responses - should deduplicate before scoring."""
+        mock_lm = StepMockLanguageModel([
+            "response1", "response2", "response1", "response3",
+            "response2", "response1", "response4", "response3"
+        ])
+        mock_orm = MockOutcomeRewardModel([0.5, 0.9, 0.3, 0.7])
+
+        bon = BestOfN(mock_orm)
+        result = await bon.ainfer(mock_lm, "test prompt", budget=8, return_response_only=False)
+
+        assert isinstance(result, BestOfNResult)
+        assert result.selected_index in [1, 4]
+        assert result.the_one["content"] == "response2"
+        assert len(result.scores) == 8
+        assert result.scores[0] == result.scores[2] == result.scores[5] == 0.5
+        assert result.scores[1] == result.scores[4] == 0.9
+        assert result.scores[3] == result.scores[7] == 0.3
+        assert result.scores[6] == 0.7
+        assert mock_orm.score_call_count == 1
+        assert mock_orm.call_count == 4
+
 
 class TestBeamSearch:
     """Test the Beam Search algorithm."""
