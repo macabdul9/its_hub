@@ -13,7 +13,7 @@ from its_hub.integration.reward_hub import LocalVllmProcessRewardModel
 
 def main():
     # Get GPU ID from environment variable or default to 0
-    gpu_id = os.environ.get('CUDA_VISIBLE_DEVICES', '0')
+    gpu_id = os.environ.get('CUDA_VISIBLE_DEVICES', '1')
 
     # Initialize the language model
     # Note: The endpoint port (8100) must match the port used when starting the vLLM server
