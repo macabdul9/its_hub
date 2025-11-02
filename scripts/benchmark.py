@@ -48,7 +48,7 @@ def _extract_boxed(s: str) -> str:
     # return the last match if any were found
     return boxed_matches[-1] if boxed_matches else ""
 
-def init_algorithm(alg: ScalingAlgorithm, model_name: str, rm_name: str, rm_device: str, rm_agg_method: AggregationMethod, tokens_per_step: int = None):
+def init_algorithm(alg: ScalingAlgorithm, model_name: str, rm_name: str, rm_device: str, rm_agg_method: AggregationMethod, tokens_per_step: int = None, selection_method: str = "sample"):
     if alg == ScalingAlgorithm.SELF_CONSISTENCY:
         return SelfConsistency(_extract_boxed)
     elif alg == ScalingAlgorithm.BEAM_SEARCH:
@@ -74,7 +74,7 @@ def init_algorithm(alg: ScalingAlgorithm, model_name: str, rm_name: str, rm_devi
         prm = LocalVllmProcessRewardModel(
             model_name=rm_name, device=rm_device, aggregation_method=rm_agg_method
         )
-        return ParticleFiltering(sg, prm)
+        return ParticleFiltering(sg=sg, prm=prm, selection_method=selection_method)
 
 def display_results(df: pd.DataFrame):
     if len(df) == 0:
@@ -97,6 +97,7 @@ def display_results(df: pd.DataFrame):
 @click.option("--endpoint", type=str, help="endpoint to use for inference-time scaling")
 @click.option("--api_key", type=str, default="NO_API_KEY", help="api key to use for inference-time scaling")
 @click.option("--rm_name", type=str, default="Qwen/Qwen2.5-Math-PRM-7B", help="name of reward model to use")
+@click.option("--selection_method", type=str, default="sample", help="selection method to use for Particle Gibbs")
 @click.option("--rm_device", type=str, default="cpu", help="device to use for reward model")
 @click.option("--rm_agg_method", type=click.Choice([e.value for e in AggregationMethod]), default="model", 
               callback=lambda ctx, param, value: AggregationMethod(value),
@@ -115,6 +116,7 @@ def display_results(df: pd.DataFrame):
 @click.option("--eval_expected_pass_at_one", is_flag=True, default=False, help="whether to evaluate expected pass at one")
 @click.option("--display_only", is_flag=True, default=False, help="whether to show only the results")
 @click.option("--tokens_per_step", type=int, default=None, help="use tokens_per_step instead of step_token for StepGeneration (easier for PF/BS algorithms)")
+
 def main(
     benchmark: BenchmarkDataset, 
     model_name: str, 
@@ -137,6 +139,7 @@ def main(
     eval_expected_pass_at_one: bool,
     display_only: bool,
     tokens_per_step: int,
+    selection_method: str,
 ):
     # print all arguments using click context
     ctx = click.get_current_context()
@@ -206,7 +209,15 @@ def main(
         )
 
     print("initializing algorithm...")
-    scaling_alg = init_algorithm(alg, model_name, rm_name, rm_device, rm_agg_method, tokens_per_step)
+    scaling_alg = init_algorithm(
+        alg=alg, 
+        model_name=model_name,
+        rm_name=rm_name,
+        rm_device=rm_device,
+        rm_agg_method=rm_agg_method,
+        tokens_per_step=tokens_per_step,
+        selection_method=selection_method,
+    )
 
     # ensure output directory exists
     if not os.path.exists(output_dir):

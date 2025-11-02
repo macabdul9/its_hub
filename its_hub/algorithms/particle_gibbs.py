@@ -79,7 +79,7 @@ class SelectionMethod(Enum):
     SAMPLE = "sample"
     ARGMAX = "argmax"
     RANDOM = "random"
-    UNCERTAINITY = "uncertainty"
+    UNCERTAINTY = "uncertainty"
 
 
 class ParticleGibbs(AbstractScalingAlgorithm):
@@ -153,8 +153,8 @@ class ParticleGibbs(AbstractScalingAlgorithm):
 
         # collect batch outputs for scoring
         if self.selection_method=="random":
-            pass
-        elif self.selection_method="uncertainty":
+            scores = [random.uniform(0, 1) for _ in range(len(steps_so_far))]
+        elif self.selection_method=="uncertainty":
             pass
         else:
             scores = await self.prm.ascore(
