@@ -9,7 +9,7 @@ python scripts/benchmark.py \
   --rm_name Qwen/Qwen2.5-Math-PRM-7B \
   --rm_device cuda:1 \
   --rm_agg_method model \
-  --budgets 16,32,64 \
+  --budgets 1 \
   --output_dir results \
   --max_tokens 2048 \
   --temperature 0.7 \

@@ -78,6 +78,8 @@ def _softmax(x):
 class SelectionMethod(Enum):
     SAMPLE = "sample"
     ARGMAX = "argmax"
+    RANDOM = "random"
+    UNCERTAINITY = "uncertainty"
 
 
 class ParticleGibbs(AbstractScalingAlgorithm):
@@ -150,13 +152,18 @@ class ParticleGibbs(AbstractScalingAlgorithm):
             steps_so_far.append(p.steps)
 
         # collect batch outputs for scoring
-        scores = await self.prm.ascore(
-            prompt,
-            [
-                self.sg._post_process(steps_so_far_per_prompt, stopped=True)
-                for steps_so_far_per_prompt in steps_so_far
-            ],
-        )
+        if self.selection_method=="random":
+            pass
+        elif self.selection_method="uncertainty":
+            pass
+        else:
+            scores = await self.prm.ascore(
+                prompt,
+                [
+                    self.sg._post_process(steps_so_far_per_prompt, stopped=True)
+                    for steps_so_far_per_prompt in steps_so_far
+                ],
+            )
 
         # update particles
         i = 0
@@ -238,6 +245,7 @@ class ParticleGibbs(AbstractScalingAlgorithm):
                         log_weights.append(p.partial_log_weights[current_step - 1])
 
                 probabilities = _softmax(log_weights)
+
                 resampled_particles = random.choices(
                     particles, weights=probabilities, k=num_free_particles
                 )
