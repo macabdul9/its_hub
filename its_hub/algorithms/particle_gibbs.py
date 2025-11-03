@@ -152,9 +152,9 @@ class ParticleGibbs(AbstractScalingAlgorithm):
             steps_so_far.append(p.steps)
 
         # collect batch outputs for scoring
-        if self.selection_method=="random":
+        if self.selection_method == SelectionMethod.RANDOM:
             scores = [random.uniform(0, 1) for _ in range(len(steps_so_far))]
-        elif self.selection_method=="uncertainty":
+        elif self.selection_method == SelectionMethod.UNCERTAINTY:
             pass
         else:
             scores = await self.prm.ascore(
