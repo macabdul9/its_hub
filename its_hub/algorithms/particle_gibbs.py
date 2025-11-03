@@ -296,6 +296,8 @@ class ParticleGibbs(AbstractScalingAlgorithm):
                 selected_index = random.choices(
                     range(len(particles)), weights=probabilities, k=1
                 )[0]
+            case SelectionMethod.RANDOM:
+                selected_index = random.randint(0, len(particles) - 1)
             case SelectionMethod.ARGMAX:
                 selected_index = np.argmax(log_weights).item()
 
